@@ -53,7 +53,7 @@ if (require.main === module) {
 
     const sensitiveData = {
         PARADISE_WHATSAPP: '919381957903',
-        PARADISE_UPI: '9381957903@ptsbi',
+        PARADISE_UPI: '8008942741@ptsbi',
 
     };
 

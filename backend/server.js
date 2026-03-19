@@ -1,5 +1,8 @@
 console.log("Starting server file")
 require("dotenv/config")
+if (!process.env.ENCRYPTION_KEY) {
+    console.warn("⚠️  [SECURITY WARNING] ENCRYPTION_KEY not found. Server is running in Insecure Mode (plain-text fallback enabled).")
+}
 
 const express = require("express")
 const bcrypt = require("bcryptjs")
@@ -712,7 +715,9 @@ function getRestaurantSecrets(slug) {
     const slugUpper = slug.toUpperCase().replace(/-/g, '_')
     const whatsappEnc = process.env[`${slugUpper}_WHATSAPP_ENCRYPTED`]
     const upiEnc = process.env[`${slugUpper}_UPI_ENCRYPTED`]
-    return { whatsappEnc, upiEnc }
+    const whatsappPlain = process.env[`${slugUpper}_WHATSAPP`]
+    const upiPlain = process.env[`${slugUpper}_UPI`]
+    return { whatsappEnc, upiEnc, whatsappPlain, upiPlain }
 }
 
 // POST /api/:slug/whatsapp-redirect
@@ -727,17 +732,31 @@ app.post("/api/:slug/whatsapp-redirect", (req, res) => {
             return res.status(400).json({ message: "Message is required" })
         }
 
-        if (!ENCRYPTION_KEY) {
-            return res.status(500).json({ message: "Encryption not configured" })
+        const { whatsappEnc, whatsappPlain } = getRestaurantSecrets(slug)
+        let whatsappNumber;
+
+        // Try decryption first if configured
+        if (ENCRYPTION_KEY && whatsappEnc) {
+            try {
+                whatsappNumber = decrypt(whatsappEnc, ENCRYPTION_KEY)
+            } catch (err) {
+                console.error(`Decryption error for ${slug}:`, err.message)
+            }
         }
 
-        const { whatsappEnc } = getRestaurantSecrets(slug)
-        if (!whatsappEnc) {
-            return res.status(404).json({ message: "Restaurant config not found" })
+        // Fallback to plain text if decryption failed or was not configured
+        if (!whatsappNumber && whatsappPlain) {
+            whatsappNumber = whatsappPlain
         }
 
-        // Decrypt in memory — value exists only for this request
-        const whatsappNumber = decrypt(whatsappEnc, ENCRYPTION_KEY)
+        if (!whatsappNumber) {
+            const reason = !ENCRYPTION_KEY ? "Encryption not configured" : "Restaurant config not found"
+            const slugUpper = slug.toUpperCase().replace(/-/g, '_')
+            console.error(`[CONFIG ERROR] WhatsApp redirection failed for ${slug}: ${reason}`)
+            console.error(`Check: ${slugUpper}_WHATSAPP_ENCRYPTED (secure) or ${slugUpper}_WHATSAPP (plain text) in your environment variables.`)
+            return res.status(404).json({ message: `Could not open WhatsApp: ${reason}. Please ensure WhatsApp is set in Render Environment Variables.` })
+        }
+
         const encoded = encodeURIComponent(message)
         const url = `https://wa.me/${whatsappNumber}?text=${encoded}`
 
@@ -759,17 +778,31 @@ app.post("/api/:slug/upi-redirect", (req, res) => {
             return res.status(400).json({ message: "Valid amount is required" })
         }
 
-        if (!ENCRYPTION_KEY) {
-            return res.status(500).json({ message: "Encryption not configured" })
+        const { upiEnc, upiPlain } = getRestaurantSecrets(slug)
+        let upiId;
+
+        // Try decryption first if configured
+        if (ENCRYPTION_KEY && upiEnc) {
+            try {
+                upiId = decrypt(upiEnc, ENCRYPTION_KEY)
+            } catch (err) {
+                console.error(`Decryption error for ${slug}:`, err.message)
+            }
         }
 
-        const { upiEnc } = getRestaurantSecrets(slug)
-        if (!upiEnc) {
-            return res.status(404).json({ message: "Restaurant config not found" })
+        // Fallback to plain text if decryption failed or was not configured
+        if (!upiId && upiPlain) {
+            upiId = upiPlain
         }
 
-        // Decrypt in memory — value exists only for this request
-        const upiId = decrypt(upiEnc, ENCRYPTION_KEY)
+        if (!upiId) {
+            const reason = !ENCRYPTION_KEY ? "Encryption not configured" : "Restaurant config not found"
+            const slugUpper = slug.toUpperCase().replace(/-/g, '_')
+            console.error(`[CONFIG ERROR] UPI redirection failed for ${slug}: ${reason}`)
+            console.error(`Check: ${slugUpper}_UPI_ENCRYPTED (secure) or ${slugUpper}_UPI (plain text) in your environment variables.`)
+            return res.status(404).json({ message: `Could not open UPI: ${reason}. Please ensure UPI ID is set in Render Environment Variables.` })
+        }
+
         const url = `upi://pay?pa=${upiId}`
             + `&pn=${encodeURIComponent(name || slug)}`
             + `&am=${amount}`
