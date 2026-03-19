@@ -51,6 +51,15 @@ app.use((req, res, next) => {
     next();
 });
 
+// Health Check for Render/Deployment
+app.get("/", (req, res) => {
+    res.json({ 
+        status: "ok", 
+        service: "Smart Menyu Backend",
+        timestamp: new Date().toISOString()
+    })
+});
+
 // ==========================================
 // RATE LIMITING
 // ==========================================
@@ -990,6 +999,6 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000
-app.listen(PORT, () => {
-    console.log(`Backend running on http://localhost:${PORT}`)
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Backend running on http://0.0.0.0:${PORT}`)
 })
