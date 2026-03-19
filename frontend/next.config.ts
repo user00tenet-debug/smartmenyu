@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: (process.env.BACKEND_URL || 'http://localhost:5000') + '/api/:path*',
+        destination: (process.env.BACKEND_URL || 'https://smartmenyu.onrender.com') + '/api/:path*',
       },
     ]
   },

@@ -23,7 +23,7 @@ const app = express()
 app.use(express.json({ limit: '1mb' }))
 app.use(helmet())
 // CORS: restrict to allowed origins (comma-separated in env, defaults to localhost)
-const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001').split(',').map(s => s.trim())
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001,https://smartmenyu.vercel.app,https://smartmenyu.onrender.com').split(',').map(s => s.trim())
 app.use(cors({
     origin: function (origin, callback) {
         console.log('Incoming origin:', origin);

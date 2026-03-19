@@ -1,3 +1,9 @@
+# Smart Menyu - Frontend
+
+## Production URLs
+- **Frontend:** [https://smartmenyu.vercel.app](https://smartmenyu.vercel.app)
+- **Backend API:** [https://smartmenyu.onrender.com](https://smartmenyu.onrender.com)
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

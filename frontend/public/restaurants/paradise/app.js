@@ -5,7 +5,7 @@
 const restaurantConfig = {
     name: 'Paradise',
     slug: 'paradise',
-    apiBaseUrl: `http://${window.location.hostname}:5000`
+    apiBaseUrl: 'https://smartmenyu.onrender.com'
 };
 
 function escapeHtml(unsafe) {

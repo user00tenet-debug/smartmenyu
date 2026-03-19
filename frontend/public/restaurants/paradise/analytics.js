@@ -5,7 +5,7 @@
 const analyticsConfig = {
     name: 'Paradise',
     slug: 'paradise',
-    apiBaseUrl: `http://${window.location.hostname}:3001`
+    apiBaseUrl: 'https://smartmenyu.onrender.com'
 };
 
 // ==========================================
