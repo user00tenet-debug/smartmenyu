@@ -722,10 +722,19 @@ const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY
 // Helper: get encrypted config for a restaurant slug
 function getRestaurantSecrets(slug) {
     const slugUpper = slug.toUpperCase().replace(/-/g, '_')
-    const whatsappEnc = process.env[`${slugUpper}_WHATSAPP_ENCRYPTED`]
-    const upiEnc = process.env[`${slugUpper}_UPI_ENCRYPTED`]
-    const whatsappPlain = process.env[`${slugUpper}_WHATSAPP`]
-    const upiPlain = process.env[`${slugUpper}_UPI`]
+    let whatsappEnc = process.env[`${slugUpper}_WHATSAPP_ENCRYPTED`]
+    let upiEnc = process.env[`${slugUpper}_UPI_ENCRYPTED`]
+    let whatsappPlain = process.env[`${slugUpper}_WHATSAPP`]
+    let upiPlain = process.env[`${slugUpper}_UPI`]
+
+    // Hardcoded bulletproof fallback for Paradise if no environment variables are set
+    if (slug === 'paradise' && !whatsappEnc && !whatsappPlain) {
+        whatsappPlain = '919381957903'
+    }
+    if (slug === 'paradise' && !upiEnc && !upiPlain) {
+        upiPlain = '8008942741@ptsbi'
+    }
+
     return { whatsappEnc, upiEnc, whatsappPlain, upiPlain }
 }
 
@@ -998,7 +1007,8 @@ app.use((err, req, res, next) => {
     });
 });
 
-const PORT = process.env.PORT || 5000
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Backend running on http://0.0.0.0:${PORT}`)
-})
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
+});
