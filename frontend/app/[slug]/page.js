@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation"
+import { API_URL } from "../apiConfig"
 import fs from "fs"
 import path from "path"
 
 export const dynamic = "force-dynamic"
 
 async function getRestaurant(slug) {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-    const res = await fetch(`${apiUrl}/${slug}`)
+    const res = await fetch(`${API_URL}/${slug}`)
     return res.json()
 }
 

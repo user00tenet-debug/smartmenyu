@@ -1,26 +1,410 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-heading: var(--font-roboto), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-alabaster: #FAFAFA;
+  --color-softblack: #171717;
+  --color-mutedgray: #525252;
+  --color-teal-50: #f0fdfa;
+  --color-teal-100: #ccfbf1;
+  --color-teal-600: #0d9488;
+  --color-teal-700: #0f766e;
+  --color-teal-800: #115e59;
+  --color-teal-900: #134e4a;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Restaurant gold accent palette */
+  --color-gold-50: #FFFBEB;
+  --color-gold-100: #FEF3C7;
+  --color-gold-200: #FDE68A;
+  --color-gold-300: #FCD34D;
+  --color-gold-400: #FBBF24;
+  --color-gold-500: #F59E0B;
+  --color-gold-600: #D97706;
+  --color-gold-700: #B45309;
+
+  /* Warm stone palette */
+  --color-warm-50: #FAFAF9;
+  --color-warm-100: #F5F5F4;
+  --color-warm-200: #E7E5E4;
+  --color-warm-800: #292524;
+  --color-warm-900: #1C1917;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-alabaster);
+  color: var(--color-softblack);
+  scroll-behavior: smooth;
+  font-family: var(--font-sans);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+}
+
+/* ===== Restaurant-Style Animations ===== */
+
+/* Fade-in and slide-up on scroll */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.7s ease-out forwards;
+}
+
+/* Subtle float animation for decorative elements */
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Shimmer effect for luxury elements */
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.text-shimmer {
+  background: linear-gradient(90deg, #D97706, #FBBF24, #D97706, #FBBF24);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 3s linear infinite;
+}
+
+/* Pulse glow for CTAs */
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 20px 6px rgba(15, 118, 110, 0.15);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Ken Burns slow zoom for hero backgrounds */
+@keyframes ken-burns {
+  0% {
+    transform: scale(1) translate(0, 0);
+  }
+
+  50% {
+    transform: scale(1.08) translate(-1%, -1%);
+  }
+
+  100% {
+    transform: scale(1) translate(0, 0);
+  }
+}
+
+.animate-ken-burns {
+  animation: ken-burns 20s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Restaurant decorative divider */
+.restaurant-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 0;
+}
+
+.restaurant-divider::before,
+.restaurant-divider::after {
+  content: "";
+  height: 1px;
+  width: 60px;
+  background: linear-gradient(to right, transparent, #D97706, transparent);
+}
+
+/* Scroll-triggered animation helper */
+[data-animate] {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+}
+
+[data-animate].visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Menu card hover effect */
+.menu-card {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.menu-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+}
+
+/* Glass morphism utility */
+.glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Advantage card subtle gradient border */
+.advantage-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.advantage-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #0f766e, #FBBF24, #0f766e);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.advantage-card:hover::before {
+  opacity: 1;
+}
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ===== Mobile-Centric Polish ===== */
+
+/* Smooth scroll for anchor navigation */
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 72px;
+  /* account for fixed navbar height */
+}
+
+/* Touch-friendly active states for mobile */
+@media (max-width: 640px) {
+
+  /* Advantage cards: 2-col grid on mobile for better density */
+  .advantage-card {
+    min-height: auto;
+  }
+
+  /* Larger touch targets for interactive cards */
+  .menu-card:active,
+  .advantage-card:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
+
+  /* CTA buttons: ensure minimum 48px tap target */
+  button {
+    min-height: 48px;
+  }
+
+  /* Tighter section spacing on mobile */
+  section {
+    scroll-margin-top: 64px;
+  }
+}
+
+/* Touch ripple effect for cards on mobile */
+@media (hover: none) {
+  .menu-card:active {
+    transform: scale(0.97);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .advantage-card:active::before {
+    opacity: 1;
+  }
+}
+
+/* Smoother transitions for all interactive elements */
+a,
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Responsive image containers — prevent layout shift */
+.menu-card img,
+.advantage-card img {
+  font-size: 0;
+  /* hide alt text during load */
+}
+
+/* ===== Staggered Reveal Animations ===== */
+
+/* Stagger children within a [data-animate] container */
+[data-animate-stagger]>* {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+}
+
+[data-animate-stagger].visible>*:nth-child(1) {
+  transition-delay: 0s;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+[data-animate-stagger].visible>*:nth-child(2) {
+  transition-delay: 0.06s;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+[data-animate-stagger].visible>*:nth-child(3) {
+  transition-delay: 0.12s;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+[data-animate-stagger].visible>*:nth-child(4) {
+  transition-delay: 0.18s;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+[data-animate-stagger].visible>*:nth-child(5) {
+  transition-delay: 0.24s;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+[data-animate-stagger].visible>*:nth-child(6) {
+  transition-delay: 0.30s;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+[data-animate-stagger].visible>*:nth-child(7) {
+  transition-delay: 0.36s;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+[data-animate-stagger].visible>*:nth-child(8) {
+  transition-delay: 0.42s;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Gold shimmer border for menu cards on hover */
+@keyframes border-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+.menu-card::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #FBBF24, #D97706, #FBBF24, transparent);
+  background-size: 200% 100%;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.menu-card:hover::after {
+  opacity: 1;
+  animation: border-shimmer 2s linear infinite;
+}
+
+/* Section separator gradient wave */
+.section-wave {
+  position: relative;
+}
+
+.section-wave::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(217, 119, 6, 0.3) 25%,
+      rgba(15, 118, 110, 0.3) 50%,
+      rgba(217, 119, 6, 0.3) 75%,
+      transparent 100%);
+}
+
+/* ===== Accessibility ===== */
+
+/* Respect user's reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  [data-animate],
+  [data-animate-stagger]>* {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .animate-ken-burns {
+    animation: none !important;
+  }
 }

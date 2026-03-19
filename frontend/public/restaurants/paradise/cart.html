@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Cart — Paradise</title>
+    <link rel="stylesheet" href="cart.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <!-- Cart Wrapper -->
+    <div class="cart-wrapper">
+        <!-- Header -->
+        <header class="cart-header">
+            <button class="back-btn" onclick="window.location.href='index.html'">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+                Go to Menu
+            </button>
+            <h1 class="cart-title">Your Cart</h1>
+        </header>
+
+        <main class="cart-main">
+            <!-- Cart Items List -->
+            <div id="cartItemsList">
+                <!-- populated by cart.js -->
+            </div>
+
+            <!-- Empty State -->
+            <div class="cart-empty" id="cartEmpty" style="display:none;">
+                <span class="cart-empty-icon">🛒</span>
+                <p>Your cart is empty.</p>
+                <button class="go-menu-btn" onclick="window.location.href='index.html'">Go to Menu</button>
+            </div>
+        </main>
+
+        <!-- Order Section -->
+        <div class="cart-order-section" id="cartOrderSection">
+            <button class="cart-order-btn" id="cartOrderBtn">Order</button>
+            <button class="cart-delivery-btn" id="cartDeliveryBtn">Home Delivery</button>
+            <button class="cart-pay-btn" id="cartPayBtn">Pay The Bill</button>
+        </div>
+    </div>
+
+    <script src="cart.js"></script>
+</body>
+
+</html>

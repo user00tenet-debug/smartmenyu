@@ -41,6 +41,8 @@ async function main() {
         }
     })
     console.log("Created restaurant:", paradise)
+
+
 }
 
 main()
