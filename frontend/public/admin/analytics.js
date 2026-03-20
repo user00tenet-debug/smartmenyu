@@ -3,7 +3,7 @@
 // ==========================================
 
 const analyticsConfig = {
-    apiBaseUrl: '/api'
+    apiBaseUrl: 'https://smartmenyu.onrender.com/api'
 };
 
 // ==========================================
