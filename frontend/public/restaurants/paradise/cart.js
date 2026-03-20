@@ -12,6 +12,33 @@ const restaurantConfig = {
 // CART PAGE — LOGIC
 // ==========================================
 
+function generateFallbackOrderId() {
+    // Generate an 8-character unique alphanumeric ID (e.g. 5X7A9B2C)
+    const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let result = '';
+    for (let i = 0; i < 8; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+}
+
+async function fetchWithTimeout(resource, options = {}) {
+    const { timeout = 3000 } = options;
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(resource, {
+            ...options,
+            signal: controller.signal
+        });
+        clearTimeout(id);
+        return response;
+    } catch (error) {
+        clearTimeout(id);
+        throw error;
+    }
+}
+
 function getCart() {
     try { return JSON.parse(localStorage.getItem('paradiseCart')) || []; }
     catch (e) { return []; }
@@ -48,6 +75,19 @@ function renderCart() {
 
     if (emptyEl) emptyEl.style.display = 'none';
     if (orderSection) orderSection.style.display = 'block';
+
+    // Step 3: Show last order ID if exists
+    const lastOrderId = localStorage.getItem('paradiseLastOrderId');
+    const statusEl = document.getElementById('orderStatus');
+    if (statusEl && lastOrderId) {
+        statusEl.innerHTML = `
+            <div style="font-size: 13px; color: #16a34a; font-weight: 600; margin-bottom: 4px;">✅ Order Placed Successfully</div>
+            <div style="font-size: 11px; color: #64748b;">Your Latest Order ID: <span style="font-weight: 700; color: #0f172a;">${lastOrderId}</span></div>
+        `;
+        statusEl.style.display = 'block';
+    } else if (statusEl) {
+        statusEl.style.display = 'none';
+    }
 
     listEl.innerHTML = cart.map((item, index) => {
         const name = escapeHtml(item.name);
@@ -145,6 +185,11 @@ function initCartPage() {
                 return;
             }
 
+            // Set loading state
+            const originalBtnText = orderBtn.innerHTML;
+            orderBtn.innerHTML = 'Placing Order...';
+            orderBtn.disabled = true;
+
             // Read table number
             const tableNumber = localStorage.getItem('paradiseTable') || 'unknown';
 
@@ -155,18 +200,21 @@ function initCartPage() {
 
             let orderId = '';
             try {
-                const orderResp = await fetch(`${restaurantConfig.apiBaseUrl}/api/${restaurantConfig.slug}/order`, {
+                const orderResp = await fetchWithTimeout(`${restaurantConfig.apiBaseUrl}/api/${restaurantConfig.slug}/order`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tableNumber, items: newItems, totalPrice: newTotal })
+                    body: JSON.stringify({ tableNumber, items: newItems, totalPrice: newTotal }),
+                    timeout: 4000 // Give it 4 seconds
                 });
                 const orderData = await orderResp.json();
                 orderId = orderData.id || '';
             } catch (err) {
-                console.log('Analytics log failed:', err);
+                console.log('Analytics log (dine-in) failed/timed out:', err.message);
             }
 
-            const shortId = orderId ? '#' + orderId.slice(-8).toUpperCase() : '#--------';
+            // Fallback to client-side ID if backend failed
+            const displayOrderId = orderId ? orderId.slice(-8).toUpperCase() : generateFallbackOrderId();
+            const shortId = '#' + displayOrderId;
 
             const now = new Date();
             const day = now.toLocaleDateString('en-IN', { day: '2-digit' });
@@ -217,6 +265,7 @@ function initCartPage() {
                 const data = await resp.json();
 
                 // Lock the items after generating the redirect
+                localStorage.setItem('paradiseLastOrderId', shortId);
                 cart.forEach(item => item.locked = true);
                 saveCart(cart);
                 renderCart();
@@ -225,10 +274,14 @@ function initCartPage() {
                     window.location.href = data.url;
                 } else {
                     alert('Server could not generate WhatsApp URL. Please contact staff.');
+                    orderBtn.innerHTML = originalBtnText;
+                    orderBtn.disabled = false;
                 }
             } catch (err) {
                 console.error('WhatsApp redirect failed:', err);
                 alert('Could not open WhatsApp: ' + err.message);
+                orderBtn.innerHTML = originalBtnText;
+                orderBtn.disabled = false;
             }
         });
     }
@@ -250,18 +303,21 @@ function initCartPage() {
 
             let orderId = '';
             try {
-                const orderResp = await fetch(`${restaurantConfig.apiBaseUrl}/api/${restaurantConfig.slug}/order`, {
+                const orderResp = await fetchWithTimeout(`${restaurantConfig.apiBaseUrl}/api/${restaurantConfig.slug}/order`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tableNumber: 'Home Delivery', items: cart, totalPrice: total })
+                    body: JSON.stringify({ tableNumber: 'Home Delivery', items: cart, totalPrice: total }),
+                    timeout: 4000
                 });
                 const orderData = await orderResp.json();
                 orderId = orderData.id || '';
             } catch (err) {
-                console.log('Analytics log failed:', err);
+                console.log('Analytics log (delivery) failed/timed out:', err.message);
             }
 
-            const shortId = orderId ? '#H' + orderId.slice(-8).toUpperCase() : '#H--------';
+            // Fallback to client-side ID if backend failed
+            const displayOrderId = orderId ? orderId.slice(-8).toUpperCase() : 'H' + generateFallbackOrderId().slice(1);
+            const shortId = '#' + displayOrderId;
 
             const now = new Date();
             const day = now.toLocaleDateString('en-IN', { day: '2-digit' });
@@ -316,13 +372,18 @@ function initCartPage() {
 
                 const data = await resp.json();
                 if (data.url) {
+                    localStorage.setItem('paradiseLastOrderId', shortId);
                     window.location.href = data.url;
                 } else {
                     alert('Server could not generate WhatsApp URL. Please contact staff.');
+                    deliveryBtn.innerHTML = originalBtnText;
+                    deliveryBtn.disabled = false;
                 }
             } catch (err) {
                 console.error('WhatsApp redirect failed:', err);
                 alert('Could not open WhatsApp: ' + err.message);
+                deliveryBtn.innerHTML = originalBtnText;
+                deliveryBtn.disabled = false;
             }
         });
     }
