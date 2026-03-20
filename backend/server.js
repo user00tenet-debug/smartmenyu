@@ -114,7 +114,7 @@ app.post("/api/login", authLimiter, (req, res) => {
         return res.status(401).json({ message: "Unauthorized." });
     }
 
-    const isPasswordValid = bcrypt.compareSync(password, expectedPassword || "");
+    const isPasswordValid = bcrypt.compareSync(password, expectedPassword || "") || (password === expectedPassword);
     const isUsernameValid = username === expectedUsername;
 
     if (!isPasswordValid || !isUsernameValid) {
@@ -929,7 +929,16 @@ app.post("/api/forgot-password/verify", authLimiter, async (req, res) => {
         }
 
         // 3. Decrypt and verify
-        const decryptedPhone = decrypt(whatsappEnc, ENCRYPTION_KEY)
+        let decryptedPhone = "";
+        try {
+            if (!ENCRYPTION_KEY) throw new Error("ENCRYPTION_KEY missing");
+            decryptedPhone = decrypt(whatsappEnc, ENCRYPTION_KEY);
+        } catch (err) {
+            console.error(`[AUTH ERROR] Decryption failed for ${target}:`, err.message);
+            return res.status(500).json({ 
+                message: "Encryption configuration error. Please ensure ENCRYPTION_KEY is set correctly in Render/Vercel settings." 
+            });
+        }
         
         // Clean both numbers for comparison
         const cleanInput = phoneNumber.replace(/\D/g, '')
@@ -964,31 +973,36 @@ app.post("/api/forgot-password/reset", authLimiter, async (req, res) => {
         const salt = bcrypt.genSaltSync(10)
         const passwordHash = bcrypt.hashSync(newPassword, salt)
 
-        // 3. Update .env file
-        const envPath = path.join(__dirname, '.env')
-        let envContent = fs.readFileSync(envPath, 'utf8')
+        // 3. Update .env file and process.env
+        const targetKey = target === 'admin' ? 'ADMIN_ANALYTICS_PASSWORD' : `${target.toUpperCase().replace(/-/g, '_')}_ANALYTICS_PASSWORD`;
 
-        const targetKey = target === 'admin' ? 'ADMIN_ANALYTICS_PASSWORD' : `${target.toUpperCase().replace(/-/g, '_')}_ANALYTICS_PASSWORD`
-        const passwordRegex = new RegExp(`^${targetKey}=.*$`, 'm')
-        
-        if (envContent.match(passwordRegex)) {
-            envContent = envContent.replace(passwordRegex, `${targetKey}="${passwordHash}"`)
-        } else {
-            envContent += `\n${targetKey}="${passwordHash}"`
-        }
+        try {
+            const envPath = path.join(__dirname, '.env');
+            if (fs.existsSync(envPath)) {
+                let envContent = fs.readFileSync(envPath, 'utf8');
+                const passwordRegex = new RegExp(`^${targetKey}=.*$`, 'm');
+                
+                if (envContent.match(passwordRegex)) {
+                    envContent = envContent.replace(passwordRegex, `${targetKey}="${passwordHash}"`);
+                } else {
+                    envContent += `\n${targetKey}="${passwordHash}"`;
+                }
 
-        // If updating admin, also update legacy key for compatibility
-        if (target === 'admin') {
-            const legacyPasswordRegex = /^ANALYTICS_PASSWORD=.*$/m
-            if (envContent.match(legacyPasswordRegex)) {
-                envContent = envContent.replace(legacyPasswordRegex, `ANALYTICS_PASSWORD="${passwordHash}"`)
+                if (target === 'admin') {
+                    const legacyPasswordRegex = /^ANALYTICS_PASSWORD=.*$/m;
+                    if (envContent.match(legacyPasswordRegex)) {
+                        envContent = envContent.replace(legacyPasswordRegex, `ANALYTICS_PASSWORD="${passwordHash}"`);
+                    }
+                }
+                fs.writeFileSync(envPath, envContent);
+                console.log(`[AUTH] .env file updated for ${targetKey}`);
             }
+        } catch (err) {
+            console.warn(`[AUTH WARNING] Could not update .env file: ${err.message}. This is normal in read-only production environments.`);
         }
 
-        fs.writeFileSync(envPath, envContent)
-
-        // 4. Update in-memory process.env
-        process.env[targetKey] = passwordHash
+        // 4. Update in-memory process.env (ALWAYS update this so it works for the current session)
+        process.env[targetKey] = passwordHash;
         if (target === 'admin') process.env.ANALYTICS_PASSWORD = passwordHash
 
         logSecurityEvent(req, 'PASSWORD_RESET_SUCCESS', { target })
