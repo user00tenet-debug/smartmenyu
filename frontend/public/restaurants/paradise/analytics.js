@@ -5,7 +5,7 @@
 const analyticsConfig = {
     name: 'Paradise',
     slug: 'paradise',
-    apiBaseUrl: 'https://smartmenyu.onrender.com'
+    apiBaseUrl: '/api'
 };
 
 // ==========================================
@@ -268,29 +268,13 @@ async function fetchAnalytics(range, from, to) {
     hideEmpty();
     hideTables();
 
-    let url = `${analyticsConfig.apiBaseUrl}/api/${analyticsConfig.slug}/analytics?range=${range}`;
+    let url = `${analyticsConfig.apiBaseUrl}/${analyticsConfig.slug}/analytics?range=${range}`;
     if (range === 'custom' && from && to) {
         url += `&from=${from}&to=${to}`;
     }
 
     try {
-        const token = sessionStorage.getItem('menyu_token');
-        const fetchOptions = { headers: { 'Authorization': `Bearer ${token}` } };
-        const response = await fetch(url, fetchOptions);
-
-        if (response.status === 401 || response.status === 403) {
-            // Credentials expired or changed — force re-login
-            sessionStorage.removeItem('menyu_admin_user');
-            sessionStorage.removeItem('menyu_token');
-            storedUsername = '';
-            document.getElementById('dashboardContent').style.display = 'none';
-            document.getElementById('loginOverlay').style.display = 'flex';
-            document.getElementById('loginError').textContent = 'Session expired. Please log in again.';
-            document.getElementById('loginError').style.display = 'block';
-            showLoading(false);
-            initLogin();
-            return;
-        }
+        const response = await fetch(url);
 
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);

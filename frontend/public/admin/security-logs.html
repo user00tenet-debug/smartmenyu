@@ -185,26 +185,15 @@
     async function loadLogs() {
       const tbody = document.getElementById('logsBody');
       
-      // Get admin credentials from sessionStorage (like the main dashboard does)
-      const token = sessionStorage.getItem('smartmenyu_token');
-      const cachedUser = sessionStorage.getItem('smartmenyu_admin_user');
-      if (!token || !cachedUser) {
-        window.location.href = 'analytics.html'; // Redirect to login
-        return;
-      }
+      // Authentication removed for direct access
       
       tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Loading logs...</td></tr>';
       
       try {
-        const url = `${config.apiBaseUrl}/api/admin/security-logs`;
-        const fetchOptions = { headers: { 'Authorization': `Bearer ${token}` } };
+        const url = `${config.apiBaseUrl}/admin/security-logs`;
+        const response = await fetch(url);
         
-        const response = await fetch(url, fetchOptions);
-        if (response.status === 401 || response.status === 403) {
-            sessionStorage.removeItem('smartmenyu_token');
-            window.location.href = 'analytics.html';
-            return;
-        }
+        // Error handling simplified for direct access
         
         const data = await response.json();
         

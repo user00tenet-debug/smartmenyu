@@ -3,7 +3,7 @@
 // ==========================================
 
 const analyticsConfig = {
-    apiBaseUrl: 'https://smartmenyu.onrender.com/api'
+    apiBaseUrl: '/api'
 };
 
 // ==========================================
@@ -263,29 +263,13 @@ async function fetchAnalytics(range, from, to) {
     hideEmpty();
     hideTables();
 
-    let url = `${analyticsConfig.apiBaseUrl}/api/admin/analytics?range=${range}`;
+    let url = `${analyticsConfig.apiBaseUrl}/admin/analytics?range=${range}`;
     if (range === 'custom' && from && to) {
         url += `&from=${from}&to=${to}`;
     }
 
     try {
-        const token = sessionStorage.getItem('smartmenyu_token');
-        const fetchOptions = { headers: { 'Authorization': `Bearer ${token}` } };
-        const response = await fetch(url, fetchOptions);
-
-        if (response.status === 401 || response.status === 403) {
-            // Credentials expired or changed — force re-login
-            sessionStorage.removeItem('smartmenyu_admin_user');
-            sessionStorage.removeItem('smartmenyu_token');
-            storedUsername = '';
-            document.getElementById('dashboardContent').style.display = 'none';
-            document.getElementById('loginOverlay').style.display = 'flex';
-            document.getElementById('loginError').textContent = 'Session expired. Please log in again.';
-            document.getElementById('loginError').style.display = 'block';
-            showLoading(false);
-            initLogin();
-            return;
-        }
+        const response = await fetch(url);
 
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
@@ -304,7 +288,7 @@ async function fetchAnalytics(range, from, to) {
         if (range !== 'custom') {
             window.analyticsPollInterval = setInterval(async () => {
                 try {
-                    const pollRes = await fetch(url, fetchOptions);
+                    const pollRes = await fetch(url);
                     if (pollRes.ok) {
                         const pollData = await pollRes.json();
                         currentData = pollData;

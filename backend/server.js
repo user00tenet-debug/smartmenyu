@@ -240,12 +240,9 @@ app.get("/health", (req, res) => {
 // ==========================================
 // SECURITY MONITORING
 // ==========================================
-app.get("/api/admin/security-logs", verifyToken, (req, res) => {
-    // Only 'admin' scope can view global security logs
-    if (req.user.scope !== 'admin') {
-        logSecurityEvent(req, 'LOG_VIEWER_FAILED', { username: req.user.username, reason: 'Insufficient scope' })
-        return res.status(403).json({ message: "Forbidden" })
-    }
+app.get("/api/admin/security-logs", (req, res) => {
+    // Authentication removed for direct access
+    logSecurityEvent(req, 'LOG_VIEWER_ACCESSED', { username: 'direct_access' })
 
     try {
         const logPath = path.join(__dirname, 'security.log')
