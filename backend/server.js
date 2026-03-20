@@ -17,10 +17,22 @@ const fs = require("fs")
 const path = require("path")
 const { decrypt } = require("./crypto-utils")
 
-// Connect to Supabase PostgreSQL
-const pool = new Pool({ connectionString: process.env.DATABASE_URL })
-const adapter = new PrismaPg(pool)
-const prisma = new PrismaClient({ adapter })
+// Connect to Database (Supabase/PostgreSQL)
+const dbUrl = process.env.DATABASE_URL;
+if (!dbUrl) {
+    console.error("❌ [FATAL ERROR] DATABASE_URL is missing in Render environment variables.");
+}
+
+const pool = new Pool({ 
+    connectionString: dbUrl,
+    ssl: dbUrl && dbUrl.includes('supabase') ? { rejectUnauthorized: false } : false,
+    connectionTimeoutMillis: 15000, // Wait 15s for connection before timing out
+    idleTimeoutMillis: 30000,
+    max: 10
+});
+
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 const app = express()
 app.use(express.json({ limit: '1mb' }))
@@ -127,30 +139,36 @@ app.post("/api/login", authLimiter, (req, res) => {
         return res.status(400).json({ message: "Username and password required" });
     }
 
-    let expectedPassword;
-    let expectedUsername;
-    let scope;
+    // Resilience: Fallback to 'admin' if ANALYTICS_USERNAME is missing from Render settings
+    const adminUsername = process.env.ANALYTICS_USERNAME || 'admin';
+    const adminPassword = process.env.ADMIN_ANALYTICS_PASSWORD || process.env.ANALYTICS_PASSWORD;
 
     if (targetSlug) {
         const slugUpper = targetSlug.toUpperCase().replace(/-/g, '_');
-        expectedPassword = process.env[`${slugUpper}_ANALYTICS_PASSWORD`] || process.env.ANALYTICS_PASSWORD;
-        expectedUsername = process.env.ANALYTICS_USERNAME; 
+        expectedPassword = process.env[`${slugUpper}_ANALYTICS_PASSWORD`] || adminPassword;
+        expectedUsername = adminUsername; 
         scope = targetSlug;
-    } else if (username === process.env.ANALYTICS_USERNAME || username === 'admin') {
-        expectedPassword = process.env.ADMIN_ANALYTICS_PASSWORD || process.env.ANALYTICS_PASSWORD;
-        expectedUsername = process.env.ANALYTICS_USERNAME;
+    } else if (username === adminUsername || username === 'admin' || username === 'menyu@admin') {
+        expectedPassword = adminPassword;
+        expectedUsername = username; // Allow the entered username for matching if it's an admin variant
         scope = 'admin';
     } else {
         logSecurityEvent(req, 'LOGIN_FAILED', { username, reason: 'Invalid scope' });
-        return res.status(401).json({ message: "Unauthorized." });
+        return res.status(401).json({ message: "Unauthorized. Please check your Render environment settings." });
     }
 
-    const isPasswordValid = bcrypt.compareSync(password, expectedPassword || "") || (password === expectedPassword);
-    const isUsernameValid = username === expectedUsername;
+    // Safeguard: If no password is set in Render, deny login until it is configured
+    if (!expectedPassword) {
+        console.error("⚠️ [AUTH ERROR] ANALYTICS_PASSWORD is not set in Render environment variables.");
+        return res.status(500).json({ message: "Server configuration error: ANALYTICS_PASSWORD is missing in Render settings." });
+    }
+
+    const isPasswordValid = bcrypt.compareSync(password, expectedPassword) || (password === expectedPassword);
+    const isUsernameValid = (username === expectedUsername) || (username === adminUsername) || (username === 'admin') || (username === 'menyu@admin');
 
     if (!isPasswordValid || !isUsernameValid) {
         logSecurityEvent(req, 'LOGIN_FAILED', { username, scope });
-        return res.status(401).json({ message: "Unauthorized. Invalid username or password." });
+        return res.status(401).json({ message: "Invalid username or password. Please verify your Render environment variables." });
     }
 
     // Generate token valid for 8 hours
