@@ -225,7 +225,17 @@ async function attemptLogin() {
         unlockDashboard(data);
     } catch (err) {
         console.error('Login failed:', err);
-        loginError.textContent = getErrorMessage(err, 'Connection error. Try again.');
+        
+        // Try to get JSON error message if available
+        let displayMsg = 'Connection error. Try again.';
+        if (err.response && err.response.headers.get('content-type')?.includes('application/json')) {
+            try {
+                const errorData = await err.response.json();
+                displayMsg = errorData.message || displayMsg;
+            } catch (jsonErr) {}
+        }
+
+        loginError.textContent = getErrorMessage(err, displayMsg);
         loginError.style.display = 'block';
         loginBtn.textContent = 'Unlock Dashboard';
         loginBtn.disabled = false;
@@ -750,11 +760,20 @@ function escapeHtml(unsafe) {
 
 function getErrorMessage(err, defaultMsg = "An unexpected error occurred. Please try again.") {
     console.error("Frontend Error Handler:", err);
-    // Mask technical details: if message contains keywords like 'Prisma', 'SQL', 'at ', ' (', etc.
-    const technicalKeywords = ['prisma', 'sql', 'database', 'stack', 'unexpected token', 'json', 'http'];
-    const msg = (err.message || "").toLowerCase();
     
-    if (technicalKeywords.some(kw => msg.includes(kw))) {
+    // If the error message already looks user-friendly (like our specific DB error), return it
+    const friendlyPhrases = ['database connection error', 'render environment variables', 'missing in render'];
+    const lowerMsg = (err.message || "").toLowerCase();
+    const lowerDefault = (defaultMsg || "").toLowerCase();
+
+    if (friendlyPhrases.some(p => lowerMsg.includes(p) || lowerDefault.includes(p))) {
+        return err.message || defaultMsg;
+    }
+
+    // Mask technical details: if message contains keywords like 'Prisma', 'SQL', etc.
+    const technicalKeywords = ['prisma', 'sql', 'stack', 'unexpected token', 'json', 'http'];
+    
+    if (technicalKeywords.some(kw => lowerMsg.includes(kw))) {
         return defaultMsg;
     }
     return err.message || defaultMsg;

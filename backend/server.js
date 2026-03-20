@@ -18,15 +18,23 @@ const path = require("path")
 const { decrypt } = require("./crypto-utils")
 
 // Connect to Database (Supabase/PostgreSQL)
-const dbUrl = process.env.DATABASE_URL;
+let dbUrl = process.env.DATABASE_URL;
 if (!dbUrl) {
     console.error("❌ [FATAL ERROR] DATABASE_URL is missing in Render environment variables.");
+} else {
+    // Resilience: Force production flags if missing (helps with Render IPv6 / connectivity issues)
+    if (!dbUrl.includes('sslmode=')) {
+        dbUrl += dbUrl.includes('?') ? '&sslmode=require' : '?sslmode=require';
+    }
+    if (!dbUrl.includes('connect_timeout=')) {
+        dbUrl += dbUrl.includes('?') ? '&connect_timeout=15' : '?connect_timeout=15';
+    }
 }
 
 const pool = new Pool({ 
     connectionString: dbUrl,
-    ssl: dbUrl && dbUrl.includes('supabase') ? { rejectUnauthorized: false } : false,
-    connectionTimeoutMillis: 15000, // Wait 15s for connection before timing out
+    ssl: dbUrl && (dbUrl.includes('supabase') || dbUrl.includes('render.com')) ? { rejectUnauthorized: false } : false,
+    connectionTimeoutMillis: 15000, 
     idleTimeoutMillis: 30000,
     max: 10
 });
@@ -37,21 +45,29 @@ const prisma = new PrismaClient({ adapter });
 const app = express()
 app.use(express.json({ limit: '1mb' }))
 app.use(helmet())
-// CORS: restrict to allowed origins (comma-separated in env, defaults to localhost)
+// CORS: allow Vercel production, localhost, and Vercel preview deployments
 const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001,https://smartmenyu.vercel.app,https://smartmenyu.onrender.com').split(',').map(s => s.trim())
+
 app.use(cors({
     origin: function (origin, callback) {
-        console.log('Incoming origin:', origin);
-        // Allow requests with no origin (mobile apps, curl, server-to-server)
-        if (!origin) return callback(null, true)
-        if (allowedOrigins.includes(origin)) {
-            return callback(null, true)
+        // Allow requests with no origin (like mobile apps or curl)
+        if (!origin) return callback(null, true);
+
+        const isAllowed = allowedOrigins.includes(origin) || 
+                         origin.endsWith(".vercel.app") || 
+                         origin.includes("localhost");
+
+        if (isAllowed) {
+            callback(null, true);
+        } else {
+            console.error('⚠️ [CORS BLOCKED]:', origin);
+            callback(new Error('Not allowed by CORS'));
         }
-        console.error('CORS blocked:', origin);
-        return callback(new Error('Not allowed by CORS'))
     },
-    credentials: true
-}))
+    credentials: true,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 // Global HTTP Method Restriction (Only GET and POST allowed)
 app.use((req, res, next) => {
@@ -1073,6 +1089,20 @@ app.post("/api/forgot-password/reset", authLimiter, async (req, res) => {
 // Global Error Handler
 app.use((err, req, res, next) => {
     console.error("Unhandled Error:", err);
+    
+    // Check for Prisma/Database connection errors
+    const isDatabaseError = err.message.includes('prisma') || 
+                           err.message.includes('connect') || 
+                           err.code?.startsWith('P1') ||
+                           err.code?.startsWith('P20');
+
+    if (isDatabaseError) {
+        return res.status(503).json({ 
+            message: "Database connection error. Please ensure your DATABASE_URL is correct in Render.",
+            detail: err.message
+        });
+    }
+
     res.status(500).json({ 
         message: "An unexpected error occurred. Please try again later." 
     });
