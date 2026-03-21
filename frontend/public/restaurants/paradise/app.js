@@ -1292,7 +1292,6 @@ function initCallWaiterBtn() {
         message += `Table: ${tableNumber}\n`;
         message += `Date & Time: ${dateTimeStr}\n\n`;
         message += `Customer at Table ${tableNumber} needs assistance.\n\n`;
-        message += `— Digital Menyu`;
 
         // Get WhatsApp URL from backend (secure — no raw number in frontend)
         try {

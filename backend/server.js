@@ -88,6 +88,37 @@ app.get("/", (req, res) => {
     })
 });
 
+// Detailed Diagnostic Health Check (Admin Only)
+app.get("/api/admin/health", async (req, res) => {
+    const health = {
+        status: "checking",
+        timestamp: new Date().toISOString(),
+        environment: {
+            DATABASE_URL: process.env.DATABASE_URL ? "✅ Present" : "❌ Missing",
+            JWT_SECRET: process.env.JWT_SECRET ? "✅ Present" : "⚠️ Using Fallback",
+            ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ? "✅ Present" : "❌ Missing",
+            ANALYTICS_USERNAME: process.env.ANALYTICS_USERNAME ? "✅ Present" : "❌ Missing",
+            ANALYTICS_PASSWORD: (process.env.ADMIN_ANALYTICS_PASSWORD || process.env.ANALYTICS_PASSWORD) ? "✅ Present" : "❌ Missing",
+            FORGOT_PASSWORD_SECRET: process.env.FORGOT_PASSWORD_SECRET ? "✅ Present" : "❌ Missing"
+        },
+        database: {
+            connected: false,
+            error: null
+        }
+    };
+
+    try {
+        await prisma.$queryRaw`SELECT 1`;
+        health.database.connected = true;
+        health.status = "ok";
+    } catch (err) {
+        health.database.error = err.message;
+        health.status = "error";
+    }
+
+    res.json(health);
+});
+
 // ==========================================
 // RATE LIMITING
 // ==========================================
@@ -209,9 +240,12 @@ app.get("/health", (req, res) => {
 // ==========================================
 // SECURITY MONITORING
 // ==========================================
-app.get("/api/admin/security-logs", (req, res) => {
-    // Authentication removed for direct access
-    logSecurityEvent(req, 'LOG_VIEWER_ACCESSED', { username: 'direct_access' })
+app.get("/api/admin/security-logs", verifyToken, (req, res) => {
+    // Only 'admin' scope can view global security logs
+    if (req.user.scope !== 'admin') {
+        logSecurityEvent(req, 'LOG_VIEWER_FAILED', { username: req.user.username, reason: 'Insufficient scope' })
+        return res.status(403).json({ message: "Forbidden" })
+    }
 
     try {
         const logPath = path.join(__dirname, 'security.log')
@@ -305,13 +339,16 @@ app.post("/api/:slug/order", eventLimiter, async (req, res) => {
 })
 
 // Update payment status of an order (restaurant owner changes status)
-app.post("/api/:slug/orders/:orderId/status", async (req, res) => {
+app.post("/api/:slug/orders/:orderId/status", verifyToken, async (req, res) => {
     try {
         const { slug } = req.params
         const { orderId } = req.params
         const { status } = req.body
 
-        // Authentication removed for direct access
+        // Scope protection: admin can edit anything, otherwise must match slug
+        if (req.user.scope !== 'admin' && req.user.scope !== slug) {
+            return res.status(403).json({ message: "Forbidden" })
+        }
 
         // Validate status value
         const validStatuses = ["paid", "unpaid", "ignore"]
@@ -344,11 +381,14 @@ app.post("/api/:slug/orders/:orderId/status", async (req, res) => {
 })
 
 // Delete an order (restaurant owner removes an order from analytics)
-app.post("/api/:slug/orders/:orderId/delete", async (req, res) => {
+app.post("/api/:slug/orders/:orderId/delete", verifyToken, async (req, res) => {
     try {
         const { slug, orderId } = req.params
 
-        // Authentication removed for direct access
+        // Scope protection: admin can edit anything, otherwise must match slug
+        if (req.user.scope !== 'admin' && req.user.scope !== slug) {
+            return res.status(403).json({ message: "Forbidden" })
+        }
 
         // Find restaurant
         const restaurant = await prisma.restaurant.findUnique({ where: { slug } })
@@ -442,11 +482,14 @@ app.post("/api/:slug/scan", eventLimiter, async (req, res) => {
 // ADMIN ANALYTICS — GLOBAL DASHBOARD
 // ==========================================
 
-app.get("/api/admin/analytics", async (req, res) => {
+app.get("/api/admin/analytics", verifyToken, async (req, res) => {
     try {
         const { range, from, to } = req.query
 
-        // Authentication removed for direct access
+        // Only 'admin' scope can view global analytics
+        if (req.user.scope !== 'admin') {
+            return res.status(403).json({ message: "Forbidden" })
+        }
 
         // Calculate date range (IST = UTC+5:30)
         const now = new Date()
@@ -588,12 +631,15 @@ app.get("/api/admin/analytics", async (req, res) => {
 // ANALYTICS — QUERY ENDPOINT
 // ==========================================
 
-app.get("/api/:slug/analytics", async (req, res) => {
+app.get("/api/:slug/analytics", verifyToken, async (req, res) => {
     try {
         const { slug } = req.params
         const { range, from, to } = req.query
 
-        // Authentication removed for direct access
+        // Scope protection: admin can view anything, otherwise must match slug
+        if (req.user.scope !== 'admin' && req.user.scope !== slug) {
+            return res.status(403).json({ message: "Forbidden" })
+        }
 
         // Find restaurant
         const restaurant = await prisma.restaurant.findUnique({ where: { slug } })
@@ -930,9 +976,17 @@ app.post("/api/forgot-password/verify", authLimiter, async (req, res) => {
             target = 'admin';
         } else {
             // 2. Find restaurant by name
-            const restaurant = await prisma.restaurant.findFirst({
-                where: { name: { equals: restaurantName, mode: 'insensitive' } }
-            })
+            let restaurant = null;
+            try {
+                restaurant = await prisma.restaurant.findFirst({
+                    where: { name: { equals: restaurantName, mode: 'insensitive' } }
+                })
+            } catch (err) {
+                console.error(`[DB ERROR] Restaurant lookup failed:`, err.message);
+                return res.status(500).json({ 
+                    message: "Database connection error. Please ensure DATABASE_URL is set correctly in Render/Vercel settings." 
+                });
+            }
 
             if (!restaurant) {
                 return res.status(404).json({ message: "Restaurant or Admin user not found" })

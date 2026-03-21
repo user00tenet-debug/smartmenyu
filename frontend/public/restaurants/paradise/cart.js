@@ -248,7 +248,6 @@ function initCartPage() {
             message += `TOTAL: ₹${newTotal.toLocaleString('en-IN')}\n`;
             message += `PAYMENT STATUS: Pending\n\n`;
             message += `Please prepare this order for Table ${tableNumber}.\n\n`;
-            message += `— Digital Menyu`;
 
             try {
                 const resp = await fetch(`${restaurantConfig.apiBaseUrl}/api/${restaurantConfig.slug}/whatsapp-redirect`, {
@@ -356,7 +355,6 @@ function initCartPage() {
             message += `💳 Payment Receipt\n`;
             message += `• Please share the payment screenshot/receipt from your UPI app.\n\n`;
             message += `Thank you.\n\n`;
-            message += `— Digital Menyu`;
 
             try {
                 const resp = await fetch(`${restaurantConfig.apiBaseUrl}/api/${restaurantConfig.slug}/whatsapp-redirect`, {
