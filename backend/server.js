@@ -88,37 +88,6 @@ app.get("/", (req, res) => {
     })
 });
 
-// Detailed Diagnostic Health Check (Admin Only)
-app.get("/api/admin/health", async (req, res) => {
-    const health = {
-        status: "checking",
-        timestamp: new Date().toISOString(),
-        environment: {
-            DATABASE_URL: process.env.DATABASE_URL ? "✅ Present" : "❌ Missing",
-            JWT_SECRET: process.env.JWT_SECRET ? "✅ Present" : "⚠️ Using Fallback",
-            ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ? "✅ Present" : "❌ Missing",
-            ANALYTICS_USERNAME: process.env.ANALYTICS_USERNAME ? "✅ Present" : "❌ Missing",
-            ANALYTICS_PASSWORD: (process.env.ADMIN_ANALYTICS_PASSWORD || process.env.ANALYTICS_PASSWORD) ? "✅ Present" : "❌ Missing",
-            FORGOT_PASSWORD_SECRET: process.env.FORGOT_PASSWORD_SECRET ? "✅ Present" : "❌ Missing"
-        },
-        database: {
-            connected: false,
-            error: null
-        }
-    };
-
-    try {
-        await prisma.$queryRaw`SELECT 1`;
-        health.database.connected = true;
-        health.status = "ok";
-    } catch (err) {
-        health.database.error = err.message;
-        health.status = "error";
-    }
-
-    res.json(health);
-});
-
 // ==========================================
 // RATE LIMITING
 // ==========================================
@@ -961,17 +930,9 @@ app.post("/api/forgot-password/verify", authLimiter, async (req, res) => {
             target = 'admin';
         } else {
             // 2. Find restaurant by name
-            let restaurant = null;
-            try {
-                restaurant = await prisma.restaurant.findFirst({
-                    where: { name: { equals: restaurantName, mode: 'insensitive' } }
-                })
-            } catch (err) {
-                console.error(`[DB ERROR] Restaurant lookup failed:`, err.message);
-                return res.status(500).json({ 
-                    message: "Database connection error. Please ensure DATABASE_URL is set correctly in Render/Vercel settings." 
-                });
-            }
+            const restaurant = await prisma.restaurant.findFirst({
+                where: { name: { equals: restaurantName, mode: 'insensitive' } }
+            })
 
             if (!restaurant) {
                 return res.status(404).json({ message: "Restaurant or Admin user not found" })
