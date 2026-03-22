@@ -15,7 +15,7 @@ To ensure the restaurant redirections work correctly, add the following to your 
 
 | Variable Name | Value | Description |
 | :--- | :--- | :--- |
-| `PARADISE_WHATSAPP` | `919381957903` | WhatsApp number for Paradise |
-| `PARADISE_UPI` | `8008942741@ptsbi` | UPI ID for Paradise |
+| `PARADISE_WHATSAPP` | `91xxxxxxxxxx` | WhatsApp number for Paradise |
+| `PARADISE_UPI` | `xxxxxxxxxx` | UPI ID for Paradise |
 | `DATABASE_URL` | *(Your Supabase URL)* | Connection string for Postgres |
 | `CORS_ORIGINS` | `https://smartmenyu.vercel.app` | Allowed frontend origin |
