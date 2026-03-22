@@ -26,14 +26,14 @@ model WaiterCalls {
 }
 
 model OrderEvent {
-  id           String     @id @default(uuid())
-  restaurantId String
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
-  tableNumber  String
-  items        Json       // Array of { name, price, qty }
-  totalPrice     Int        // Total in ₹
-  paymentStatus  String     @default("unpaid") // "paid", "unpaid", or "ignore"
-  createdAt      DateTime   @default(now())
+  id            String     @id @default(uuid())
+  restaurantId  String
+  tableNumber   String
+  items         Json
+  totalPrice    Int
+  createdAt     DateTime   @default(now())
+  paymentStatus String     @default("unpaid")
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
 
   @@index([restaurantId])
   @@index([createdAt])
@@ -42,11 +42,11 @@ model OrderEvent {
 model PaymentEvent {
   id           String     @id @default(uuid())
   restaurantId String
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
   tableNumber  String
-  amount       Int        // Payment amount in ₹
-  items        Json       // Cart snapshot at payment time
+  amount       Int
+  items        Json
   createdAt    DateTime   @default(now())
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
 
   @@index([restaurantId])
   @@index([createdAt])
@@ -55,9 +55,9 @@ model PaymentEvent {
 model ScanEvent {
   id           String     @id @default(uuid())
   restaurantId String
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
   tableNumber  String?
   createdAt    DateTime   @default(now())
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
 
   @@index([restaurantId])
   @@index([createdAt])

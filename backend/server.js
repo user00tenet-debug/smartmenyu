@@ -91,20 +91,16 @@ app.get("/", (req, res) => {
 // Detailed Diagnostic Health Check (Admin Only)
 app.get("/api/admin/health", async (req, res) => {
     const health = {
-        status: "checking",
+        status: "starting",
         timestamp: new Date().toISOString(),
-        environment: {
+        env: {
+            NODE_ENV: process.env.NODE_ENV || 'development',
             DATABASE_URL: process.env.DATABASE_URL ? "✅ Present" : "❌ Missing",
             JWT_SECRET: process.env.JWT_SECRET ? "✅ Present" : "⚠️ Using Fallback",
-            ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ? "✅ Present" : "❌ Missing",
             ANALYTICS_USERNAME: process.env.ANALYTICS_USERNAME ? "✅ Present" : "❌ Missing",
-            ANALYTICS_PASSWORD: (process.env.ADMIN_ANALYTICS_PASSWORD || process.env.ANALYTICS_PASSWORD) ? "✅ Present" : "❌ Missing",
-            FORGOT_PASSWORD_SECRET: process.env.FORGOT_PASSWORD_SECRET ? "✅ Present" : "❌ Missing"
+            ADMIN_ANALYTICS_PASSWORD: process.env.ADMIN_ANALYTICS_PASSWORD ? "✅ Present" : "❌ Missing"
         },
-        database: {
-            connected: false,
-            error: null
-        }
+        database: { connected: false, error: null }
     };
 
     try {
@@ -114,9 +110,29 @@ app.get("/api/admin/health", async (req, res) => {
     } catch (err) {
         health.database.error = err.message;
         health.status = "error";
+        console.error("❌ [HEALTH CHECK FAILED]:", err.message);
     }
-
     res.json(health);
+});
+
+// Added DB diagnostic route
+app.get("/api/db-test", async (req, res) => {
+    try {
+        const result = await prisma.$queryRaw`SELECT 1 as connection_test`;
+        res.json({ 
+            success: true, 
+            message: "Database connection successful!", 
+            data: result,
+            info: "Prisma client initialized and connected to Supabase."
+        });
+    } catch (error) {
+        console.error("❌ [DB TEST FAILED]:", error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message,
+            hint: "Check your DATABASE_URL in Render. Ensure it includes ?sslmode=require"
+        });
+    }
 });
 
 // ==========================================
@@ -149,49 +165,66 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key-change-in-prod
 
 // Standard login endpoint to issue JWT tokens
 app.post("/api/login", authLimiter, (req, res) => {
-    const { username, password, targetSlug } = req.body;
-    
-    if (!username || !password) {
-        return res.status(400).json({ message: "Username and password required" });
+    try {
+        const { username, password, targetSlug } = req.body;
+        
+        if (!username || !password) {
+            return res.status(400).json({ message: "Username and password required" });
+        }
+
+        // Initialize variables to avoid ReferenceError
+        let expectedPassword = '';
+        let expectedUsername = '';
+        let scope = 'admin';
+
+        // Resilience: Fallback to 'admin' if ANALYTICS_USERNAME is missing from Render settings
+        const adminUsername = process.env.ANALYTICS_USERNAME || 'admin';
+        const adminPassword = process.env.ADMIN_ANALYTICS_PASSWORD || process.env.ANALYTICS_PASSWORD;
+
+        if (targetSlug) {
+            const slugUpper = targetSlug.toUpperCase().replace(/-/g, '_');
+            expectedPassword = process.env[`${slugUpper}_ANALYTICS_PASSWORD`] || adminPassword;
+            expectedUsername = adminUsername; 
+            scope = targetSlug;
+        } else if (username === adminUsername || username === 'admin' || username === 'menyu@admin') {
+            expectedPassword = adminPassword;
+            expectedUsername = username; 
+            scope = 'admin';
+        } else {
+            logSecurityEvent(req, 'LOGIN_FAILED', { username, reason: 'Invalid scope' });
+            return res.status(401).json({ message: "Unauthorized credentials. Please check your Render settings." });
+        }
+
+        // Safeguard: If no password is set in Render, deny login until it is configured
+        if (!expectedPassword) {
+            console.error("⚠️ [AUTH ERROR] ANALYTICS_PASSWORD is not set in Render environment variables.");
+            return res.status(500).json({ 
+                message: "Server configuration error: ANALYTICS_PASSWORD is missing in Render settings.",
+                detail: "Check Render Environment Variables for ADMIN_ANALYTICS_PASSWORD"
+            });
+        }
+
+        // Secure Comparison
+        const isPasswordValid = bcrypt.compareSync(password, String(expectedPassword)) || (password === expectedPassword);
+        const isUsernameValid = (username === expectedUsername) || (username === adminUsername) || (username === 'admin') || (username === 'menyu@admin');
+
+        if (!isPasswordValid || !isUsernameValid) {
+            logSecurityEvent(req, 'LOGIN_FAILED', { username, scope });
+            return res.status(401).json({ message: "Invalid username or password. Please verify your credentials." });
+        }
+
+        // Generate token valid for 8 hours
+        const tokenToken = jwt.sign({ username, scope }, JWT_SECRET, { expiresIn: '8h' });
+        logSecurityEvent(req, 'LOGIN_SUCCESS', { username, scope });
+        
+        res.json({ token: tokenToken, scope });
+    } catch (err) {
+        console.error("❌ [LOGIN CRITICAL ERROR]:", err);
+        res.status(500).json({ 
+            message: "A server error occurred during login.",
+            detail: err.message
+        });
     }
-
-    // Resilience: Fallback to 'admin' if ANALYTICS_USERNAME is missing from Render settings
-    const adminUsername = process.env.ANALYTICS_USERNAME || 'admin';
-    const adminPassword = process.env.ADMIN_ANALYTICS_PASSWORD || process.env.ANALYTICS_PASSWORD;
-
-    if (targetSlug) {
-        const slugUpper = targetSlug.toUpperCase().replace(/-/g, '_');
-        expectedPassword = process.env[`${slugUpper}_ANALYTICS_PASSWORD`] || adminPassword;
-        expectedUsername = adminUsername; 
-        scope = targetSlug;
-    } else if (username === adminUsername || username === 'admin' || username === 'menyu@admin') {
-        expectedPassword = adminPassword;
-        expectedUsername = username; // Allow the entered username for matching if it's an admin variant
-        scope = 'admin';
-    } else {
-        logSecurityEvent(req, 'LOGIN_FAILED', { username, reason: 'Invalid scope' });
-        return res.status(401).json({ message: "Unauthorized. Please check your Render environment settings." });
-    }
-
-    // Safeguard: If no password is set in Render, deny login until it is configured
-    if (!expectedPassword) {
-        console.error("⚠️ [AUTH ERROR] ANALYTICS_PASSWORD is not set in Render environment variables.");
-        return res.status(500).json({ message: "Server configuration error: ANALYTICS_PASSWORD is missing in Render settings." });
-    }
-
-    const isPasswordValid = bcrypt.compareSync(password, expectedPassword) || (password === expectedPassword);
-    const isUsernameValid = (username === expectedUsername) || (username === adminUsername) || (username === 'admin') || (username === 'menyu@admin');
-
-    if (!isPasswordValid || !isUsernameValid) {
-        logSecurityEvent(req, 'LOGIN_FAILED', { username, scope });
-        return res.status(401).json({ message: "Invalid username or password. Please verify your Render environment variables." });
-    }
-
-    // Generate token valid for 8 hours
-    const token = jwt.sign({ username, scope }, JWT_SECRET, { expiresIn: '8h' });
-    logSecurityEvent(req, 'LOGIN_SUCCESS', { username, scope });
-    
-    res.json({ token, scope });
 });
 
 // Middleware to protect routes
