@@ -170,7 +170,7 @@
   </div>
 
   <script>
-    const config = { apiBaseUrl: '/api' };
+    const config = { apiBaseUrl: '' }; // Uses relative paths through Next.js rewrites
     
     function escapeHtml(unsafe) {
         if (!unsafe || typeof unsafe !== 'string') return unsafe;
@@ -197,7 +197,10 @@
       
       try {
         const url = `${config.apiBaseUrl}/api/admin/security-logs`;
-        const fetchOptions = { headers: { 'Authorization': `Bearer ${token}` } };
+        const fetchOptions = { 
+            headers: { 'Authorization': `Bearer ${token}` },
+            credentials: 'include'
+        };
         
         const response = await fetch(url, fetchOptions);
         if (response.status === 401 || response.status === 403) {

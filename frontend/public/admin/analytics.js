@@ -3,7 +3,7 @@
 // ==========================================
 
 const analyticsConfig = {
-    apiBaseUrl: 'https://smartmenyu.onrender.com/api'
+    apiBaseUrl: '', // Uses relative paths through Next.js rewrites
 };
 
 // ==========================================
@@ -183,24 +183,19 @@ async function attemptLogin() {
         const loginResponse = await fetch(loginUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ username, password })
         });
 
-        if (loginResponse.status === 401 || loginResponse.status === 403) {
-            // Wrong password
-            loginError.style.display = 'block';
-            passwordInput.classList.add('shake');
-            setTimeout(() => passwordInput.classList.remove('shake'), 400);
-            passwordInput.value = '';
-            passwordInput.focus();
-            generateCaptcha();
-            loginBtn.textContent = 'Unlock Dashboard';
-            loginBtn.disabled = false;
-            return;
-        }
-
         if (!loginResponse.ok) {
-            throw new Error(`HTTP ${loginResponse.status}`);
+            let errorMsg = `HTTP ${loginResponse.status}`;
+            try {
+                const errorData = await loginResponse.json();
+                if (errorData && errorData.message) {
+                    errorMsg = errorData.message;
+                }
+            } catch (jsonErr) {}
+            throw new Error(errorMsg);
         }
 
         const loginData = await loginResponse.json();
@@ -214,28 +209,34 @@ async function attemptLogin() {
         // Step 2: Fetch the analytics data using the new token
         const dataUrl = `${analyticsConfig.apiBaseUrl}/api/admin/analytics?range=today`;
         const dataResponse = await fetch(dataUrl, {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: { 'Authorization': `Bearer ${token}` },
+            credentials: 'include'
         });
         
-        if (!dataResponse.ok) throw new Error('Failed to fetch data');
+        if (!dataResponse.ok) {
+            let errorMsg = 'Failed to fetch data';
+            try {
+                const errorData = await dataResponse.json();
+                if (errorData && errorData.message) {
+                    errorMsg = errorData.message;
+                }
+            } catch (jsonErr) {}
+            throw new Error(errorMsg);
+        }
 
         const data = await dataResponse.json();
         currentData = data;
 
         unlockDashboard(data);
     } catch (err) {
-        console.error('Login failed:', err);
+        console.error('❌ [AUTH ERROR] Login failed:', err);
         
-        // Try to get JSON error message if available
-        let displayMsg = 'Connection error. Try again.';
-        if (err.response && err.response.headers.get('content-type')?.includes('application/json')) {
-            try {
-                const errorData = await err.response.json();
-                displayMsg = errorData.message || displayMsg;
-            } catch (jsonErr) {}
+        // Detailed diagnostics for developers
+        if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
+            console.warn('💡 Possible CORS or URL issue. Check if backend is running and allows your origin.');
         }
 
-        loginError.textContent = getErrorMessage(err, displayMsg);
+        loginError.textContent = getErrorMessage(err, 'Connection error. Try again.');
         loginError.style.display = 'block';
         loginBtn.textContent = 'Unlock Dashboard';
         loginBtn.disabled = false;
@@ -374,6 +375,7 @@ function initForgotPassword() {
             const response = await fetch(`${analyticsConfig.apiBaseUrl}/api/forgot-password/reset`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({ secretCode, newPassword, target: resetTarget })
             });
 
@@ -529,13 +531,14 @@ async function saveNewPassword() {
     errorMsg.style.display = 'none';
 
     try {
-        const token = sessionStorage.getItem('menyu_token');
+        const token = sessionStorage.getItem('smartmenyu_token');
         const response = await fetch(`${analyticsConfig.apiBaseUrl}/api/admin/change-password`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
+            credentials: 'include',
             body: JSON.stringify({
                 username: storedUsername,
                 currentPassword: currentPw,
@@ -649,7 +652,10 @@ async function fetchAnalytics(range, from, to) {
 
     try {
         const token = sessionStorage.getItem('smartmenyu_token');
-        const fetchOptions = { headers: { 'Authorization': `Bearer ${token}` } };
+        const fetchOptions = { 
+            headers: { 'Authorization': `Bearer ${token}` },
+            credentials: 'include' 
+        };
         const response = await fetch(url, fetchOptions);
 
         if (response.status === 401 || response.status === 403) {
@@ -759,9 +765,14 @@ function escapeHtml(unsafe) {
 }
 
 function getErrorMessage(err, defaultMsg = "An unexpected error occurred. Please try again.") {
-    console.error("Frontend Error Handler:", err);
+    console.error("🔍 Audit Log:", err);
     
-    // If the error message already looks user-friendly (like our specific DB error), return it
+    // 1. Handle Network Errors (Browser-level)
+    if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
+        return "Network Error: Could not reach backend server. Please check your internet or if the server is down.";
+    }
+
+    // 2. Handle known friendly phrases from backend
     const friendlyPhrases = ['database connection error', 'render environment variables', 'missing in render'];
     const lowerMsg = (err.message || "").toLowerCase();
     const lowerDefault = (defaultMsg || "").toLowerCase();
@@ -770,12 +781,12 @@ function getErrorMessage(err, defaultMsg = "An unexpected error occurred. Please
         return err.message || defaultMsg;
     }
 
-    // Mask technical details: if message contains keywords like 'Prisma', 'SQL', etc.
-    const technicalKeywords = ['prisma', 'sql', 'stack', 'unexpected token', 'json', 'http'];
-    
+    // 3. Mask technical details for unknown errors
+    const technicalKeywords = ['prisma', 'sql', 'stack', 'unexpected token', 'json', 'near', 'syntax'];
     if (technicalKeywords.some(kw => lowerMsg.includes(kw))) {
         return defaultMsg;
     }
+    
     return err.message || defaultMsg;
 }
 
