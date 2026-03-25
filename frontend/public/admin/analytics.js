@@ -3,7 +3,7 @@
 // ==========================================
 
 const analyticsConfig = {
-    apiBaseUrl: '', // Uses relative paths through Next.js rewrites
+    apiBaseUrl: 'https://smartmenyu.onrender.com/api'
 };
 
 // ==========================================
@@ -21,11 +21,12 @@ let currentCaptcha = '';
 // ==========================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Check if already authenticated or just show login
-    if (storedUsername && sessionStorage.getItem('smartmenyu_token')) {
+    // Check if already authenticated in this session
+    if (storedUsername && storedPassword) {
         unlockDashboard();
     } else {
         initLogin();
+        initForgotPassword();
     }
 });
 
@@ -35,41 +36,371 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initLogin() {
     const loginBtn = document.getElementById('loginBtn');
-    if (!loginBtn) return;
+    const usernameInput = document.getElementById('loginUsername');
+    const passwordInput = document.getElementById('loginPassword');
+    const captchaInput = document.getElementById('captchaInput');
+    const loginError = document.getElementById('loginError');
 
     // Reset button state
-    loginBtn.textContent = 'Login';
+    loginBtn.textContent = 'Unlock Dashboard';
     loginBtn.disabled = false;
 
-    // Prevent duplicate event listeners
+    // Prevent duplicate event listeners on re-init (after logout)
     if (!loginBtn.dataset.initialized) {
         loginBtn.dataset.initialized = 'true';
-        loginBtn.addEventListener('click', () => simplifiedLogin());
+        loginBtn.addEventListener('click', () => attemptLogin());
+
+        // Allow Enter key to submit
+        [usernameInput, passwordInput, captchaInput].forEach(input => {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') attemptLogin();
+            });
+        });
+
+        // Refresh captcha button
+        const refreshBtn = document.getElementById('refreshCaptcha');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => generateCaptcha());
+        }
+    }
+
+    // Generate initial captcha
+    generateCaptcha();
+
+    // Focus the first empty field
+    if (!usernameInput.value) {
+        usernameInput.focus();
+    } else {
+        passwordInput.focus();
     }
 }
 
-async function simplifiedLogin() {
+// ==========================================
+// CAPTCHA
+// ==========================================
+
+function generateCaptcha() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let captcha = '';
+    for (let i = 0; i < 4; i++) {
+        captcha += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    currentCaptcha = captcha;
+    drawCaptcha(captcha);
+    const captchaInput = document.getElementById('captchaInput');
+    if (captchaInput) captchaInput.value = '';
+}
+
+function drawCaptcha(text) {
+    const canvas = document.getElementById('captchaCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+
+    // Clear
+    ctx.clearRect(0, 0, w, h);
+
+    // Background
+    ctx.fillStyle = '#faf6ef';
+    ctx.fillRect(0, 0, w, h);
+
+    // Draw noise lines
+    for (let i = 0; i < 5; i++) {
+        ctx.strokeStyle = `rgba(${Math.random()*150}, ${Math.random()*150}, ${Math.random()*150}, 0.4)`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(Math.random() * w, Math.random() * h);
+        ctx.lineTo(Math.random() * w, Math.random() * h);
+        ctx.stroke();
+    }
+
+    // Draw noise dots
+    for (let i = 0; i < 30; i++) {
+        ctx.fillStyle = `rgba(${Math.random()*200}, ${Math.random()*200}, ${Math.random()*200}, 0.5)`;
+        ctx.beginPath();
+        ctx.arc(Math.random() * w, Math.random() * h, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Draw each character with slight rotation and offset
+    ctx.font = 'bold 24px Inter, sans-serif';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < text.length; i++) {
+        ctx.save();
+        const x = 20 + i * 28;
+        const y = h / 2 + (Math.random() * 8 - 4);
+        const angle = (Math.random() - 0.5) * 0.4;
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.fillStyle = `hsl(${Math.random()*60 + 15}, 60%, ${Math.random()*20 + 25}%)`;
+        ctx.fillText(text[i], 0, 0);
+        ctx.restore();
+    }
+}
+
+async function attemptLogin() {
+    const usernameInput = document.getElementById('loginUsername');
+    const passwordInput = document.getElementById('loginPassword');
+    const loginError = document.getElementById('loginError');
     const loginBtn = document.getElementById('loginBtn');
-    loginBtn.textContent = 'Connecting...';
+    
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value.trim();
+    const captchaInput = document.getElementById('captchaInput');
+    const captchaValue = captchaInput ? captchaInput.value.trim() : '';
+
+    if (!username) {
+        usernameInput.focus();
+        return;
+    }
+    if (!password) {
+        passwordInput.focus();
+        return;
+    }
+    if (captchaValue !== currentCaptcha) {
+        loginError.textContent = 'Invalid captcha. Please try again.';
+        loginError.style.display = 'block';
+        if (captchaInput) {
+            captchaInput.classList.add('shake');
+            setTimeout(() => captchaInput.classList.remove('shake'), 400);
+            captchaInput.value = '';
+            captchaInput.focus();
+        }
+        generateCaptcha();
+        loginBtn.textContent = 'Unlock Dashboard';
+        loginBtn.disabled = false;
+        return;
+    }
+
+    // Disable button while checking
+    loginBtn.textContent = 'Checking...';
     loginBtn.disabled = true;
 
-    // For now, we just unlock. In a real scenario, we might still 
-    // want to fetch initial data if the backend is unlocked.
     try {
-        unlockDashboard();
+        // Step 1: Login to get JWT Token
+        const loginUrl = `${analyticsConfig.apiBaseUrl}/api/login`;
+        const loginResponse = await fetch(loginUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        if (loginResponse.status === 401 || loginResponse.status === 403) {
+            // Wrong password
+            loginError.style.display = 'block';
+            passwordInput.classList.add('shake');
+            setTimeout(() => passwordInput.classList.remove('shake'), 400);
+            passwordInput.value = '';
+            passwordInput.focus();
+            generateCaptcha();
+            loginBtn.textContent = 'Unlock Dashboard';
+            loginBtn.disabled = false;
+            return;
+        }
+
+        if (!loginResponse.ok) {
+            throw new Error(`HTTP ${loginResponse.status}`);
+        }
+
+        const loginData = await loginResponse.json();
+        const token = loginData.token;
+
+        // Credentials correct — save token and unlock
+        storedUsername = username; // Keep username for UI purposes
+        sessionStorage.setItem('smartmenyu_admin_user', username);
+        sessionStorage.setItem('smartmenyu_token', token);
+
+        // Step 2: Fetch the analytics data using the new token
+        const dataUrl = `${analyticsConfig.apiBaseUrl}/api/admin/analytics?range=today`;
+        const dataResponse = await fetch(dataUrl, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!dataResponse.ok) throw new Error('Failed to fetch data');
+
+        const data = await dataResponse.json();
+        currentData = data;
+
+        unlockDashboard(data);
     } catch (err) {
         console.error('Login failed:', err);
-        const loginError = document.getElementById('loginError');
-        if (loginError) {
-            loginError.textContent = 'Failed to load dashboard. Please try again.';
-            loginError.style.display = 'block';
+        
+        // Try to get JSON error message if available
+        let displayMsg = 'Connection error. Try again.';
+        if (err.response && err.response.headers.get('content-type')?.includes('application/json')) {
+            try {
+                const errorData = await err.response.json();
+                displayMsg = errorData.message || displayMsg;
+            } catch (jsonErr) {}
         }
-        loginBtn.textContent = 'Login';
+
+        loginError.textContent = getErrorMessage(err, displayMsg);
+        loginError.style.display = 'block';
+        loginBtn.textContent = 'Unlock Dashboard';
         loginBtn.disabled = false;
     }
 }
 
-// Forgot password logic removed as per user request
+// ==========================================
+// PASSWORD STRENGTH CHECKER (shared)
+// ==========================================
+
+function checkPasswordStrength(pw, prefix) {
+    const rules = {
+        '8': pw.length >= 8,
+        'Upper': /[A-Z]/.test(pw),
+        'Lower': /[a-z]/.test(pw),
+        'Num': /[0-9]/.test(pw),
+        'Special': /[^A-Za-z0-9]/.test(pw)
+    };
+
+    let passed = 0;
+    for (const [key, ok] of Object.entries(rules)) {
+        const li = document.getElementById(prefix + 'Rule' + key);
+        if (li) {
+            li.textContent = (ok ? '✓ ' : '✗ ') + li.textContent.replace(/^[✓✗]\s*/, '');
+            li.classList.toggle('pass', ok);
+        }
+        if (ok) passed++;
+    }
+
+    // Determine strength level
+    let level = 'weak';
+    if (passed >= 5) level = 'strong';
+    else if (passed >= 3) level = 'medium';
+
+    // Update strength bar fill
+    const fill = document.getElementById(prefix + 'PwStrengthFill');
+    if (fill) {
+        fill.className = 'pw-strength-fill ' + level;
+    }
+
+    // Update strength label
+    const label = document.getElementById(prefix + 'PwStrengthLabel');
+    if (label) {
+        label.textContent = level.charAt(0).toUpperCase() + level.slice(1);
+        label.className = 'pw-strength-label ' + level;
+    }
+
+    // Show/hide the strength container
+    const container = document.getElementById(prefix + 'PwStrength');
+    if (container) {
+        container.style.display = pw.length > 0 ? 'block' : 'none';
+    }
+
+    return passed === 5;
+}
+
+// ==========================================
+// FORGOT PASSWORD
+// ==========================================
+
+function initForgotPassword() {
+    const forgotPwLink = document.getElementById('forgotPwLink');
+    const resetPwBtn = document.getElementById('resetPwBtn');
+
+    const loginCard = document.querySelector('#loginOverlay .login-card:not([id])') || document.querySelector('#loginOverlay .login-card:first-child');
+    const step2Card = document.getElementById('forgotStep2');
+
+    let resetTarget = 'admin'; // Default fallback
+
+    if (!forgotPwLink) return;
+
+    // 1. Show Step 2 Directly (Bypass Step 1)
+    forgotPwLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        loginCard.style.display = 'none';
+        step2Card.style.display = 'block';
+        document.getElementById('forgotSecretCode').focus();
+    });
+
+    // 2. Back to Login (From Step 2)
+    const backFromStep2Btn = document.createElement('button');
+    backFromStep2Btn.className = 'login-btn btn-secondary';
+    backFromStep2Btn.style.background = '#e5e7eb';
+    backFromStep2Btn.style.color = '#374151';
+    backFromStep2Btn.style.marginTop = '10px';
+    backFromStep2Btn.textContent = 'Back';
+    backFromStep2Btn.onclick = () => {
+        step2Card.style.display = 'none';
+        loginCard.style.display = 'block';
+    };
+    
+    // Insert back button before the Change Password button or after the form
+    resetPwBtn.parentNode.insertBefore(backFromStep2Btn, resetPwBtn.nextSibling);
+
+    // 3. Password strength checker for forgot password
+    resetPwBtn.disabled = true;
+    const forgotNewPwInput = document.getElementById('forgotNewPw');
+    if (forgotNewPwInput) {
+        forgotNewPwInput.addEventListener('input', () => {
+            const allPassed = checkPasswordStrength(forgotNewPwInput.value, 'forgot');
+            resetPwBtn.disabled = !allPassed;
+        });
+    }
+
+    // 4. Reset Password
+    resetPwBtn.addEventListener('click', async () => {
+        const secretCode = document.getElementById('forgotSecretCode').value.trim();
+        const newPassword = document.getElementById('forgotNewPw').value.trim();
+        const confirmPw = document.getElementById('forgotConfirmPw').value.trim();
+        const errorEl = document.getElementById('forgotError2');
+        const successEl = document.getElementById('forgotSuccess');
+
+        if (!secretCode || !newPassword || !confirmPw) {
+            errorEl.textContent = 'Please fill in all fields.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        if (newPassword !== confirmPw) {
+            errorEl.textContent = 'Passwords do not match.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        if (!checkPasswordStrength(newPassword, 'forgot')) {
+            errorEl.textContent = 'Password does not meet the policy requirements.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        resetPwBtn.disabled = true;
+        resetPwBtn.textContent = 'Changing...';
+        errorEl.style.display = 'none';
+
+        try {
+            const response = await fetch(`${analyticsConfig.apiBaseUrl}/api/forgot-password/reset`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ secretCode, newPassword, target: resetTarget })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                errorEl.textContent = result.message || 'Reset failed.';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            // Success
+            successEl.style.display = 'block';
+            setTimeout(() => {
+                window.location.reload(); // Reload to start fresh
+            }, 2000);
+
+        } catch (err) {
+            console.error('Reset error:', err);
+            errorEl.textContent = getErrorMessage(err, 'Connection error. Try again.');
+            errorEl.style.display = 'block';
+        } finally {
+            resetPwBtn.disabled = false;
+            resetPwBtn.textContent = 'Change Password';
+        }
+    });
+}
 
 function unlockDashboard(initialData) {
     // Hide login, show dashboard
@@ -80,6 +411,7 @@ function unlockDashboard(initialData) {
     initFilterButtons();
     initCustomDatePicker();
     initLogoutButton();
+    initChangePasswordModal();
 
     // If we already have data from login, render it. Otherwise fetch.
     if (initialData) {
@@ -105,13 +437,139 @@ function initLogoutButton() {
         storedPassword = '';
         document.getElementById('dashboardContent').style.display = 'none';
         document.getElementById('loginOverlay').style.display = 'flex';
-        const loginError = document.getElementById('loginError');
-        if (loginError) loginError.style.display = 'none';
+        document.getElementById('loginUsername').value = '';
+        document.getElementById('loginPassword').value = '';
+        document.getElementById('loginError').style.display = 'none';
+        document.getElementById('captchaInput').value = '';
         initLogin();
     });
 }
 
-// Change password logic removed as per user request
+// ==========================================
+// CHANGE PASSWORD
+// ==========================================
+
+function initChangePasswordModal() {
+    const changePwBtn = document.getElementById('changePwBtn');
+    const modal = document.getElementById('changePasswordModal');
+    const closeBtn = document.getElementById('closeModalBtn');
+    const saveBtn = document.getElementById('savePasswordBtn');
+    
+    const currentPwInput = document.getElementById('currentPassword');
+    const newPwInput = document.getElementById('newPassword');
+    const confirmPwInput = document.getElementById('confirmPassword');
+    
+    const errorMsg = document.getElementById('modalError');
+    const successMsg = document.getElementById('modalSuccess');
+
+    if (!changePwBtn) return;
+
+    // Password strength checker for change password modal
+    saveBtn.disabled = true;
+    newPwInput.addEventListener('input', () => {
+        const allPassed = checkPasswordStrength(newPwInput.value, 'modal');
+        saveBtn.disabled = !allPassed;
+    });
+
+    changePwBtn.addEventListener('click', () => {
+        errorMsg.style.display = 'none';
+        successMsg.style.display = 'none';
+        currentPwInput.value = '';
+        newPwInput.value = '';
+        confirmPwInput.value = '';
+        // Reset strength UI
+        const strengthEl = document.getElementById('modalPwStrength');
+        if (strengthEl) strengthEl.style.display = 'none';
+        saveBtn.disabled = true;
+        modal.style.display = 'flex';
+        currentPwInput.focus();
+    });
+
+    closeBtn.addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+
+    saveBtn.addEventListener('click', () => saveNewPassword());
+}
+
+async function saveNewPassword() {
+    const currentPwInput = document.getElementById('currentPassword');
+    const newPwInput = document.getElementById('newPassword');
+    const confirmPwInput = document.getElementById('confirmPassword');
+    const saveBtn = document.getElementById('savePasswordBtn');
+    const errorMsg = document.getElementById('modalError');
+    const successMsg = document.getElementById('modalSuccess');
+
+    const currentPw = currentPwInput.value.trim();
+    const newPw = newPwInput.value.trim();
+    const confirmPw = confirmPwInput.value.trim();
+
+    // 1. Validation
+    if (!currentPw || !newPw || !confirmPw) {
+        errorMsg.textContent = 'Please fill in all fields.';
+        errorMsg.style.display = 'block';
+        return;
+    }
+
+    if (newPw !== confirmPw) {
+        errorMsg.textContent = 'New passwords do not match.';
+        errorMsg.style.display = 'block';
+        return;
+    }
+
+    if (!checkPasswordStrength(newPw, 'modal')) {
+        errorMsg.textContent = 'Password does not meet the policy requirements.';
+        errorMsg.style.display = 'block';
+        return;
+    }
+
+    // 2. API Call
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    errorMsg.style.display = 'none';
+
+    try {
+        const token = sessionStorage.getItem('menyu_token');
+        const response = await fetch(`${analyticsConfig.apiBaseUrl}/api/admin/change-password`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                username: storedUsername,
+                currentPassword: currentPw,
+                newPassword: newPw
+            })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            errorMsg.textContent = result.message || `Error ${response.status}: Failed to update password.`;
+            errorMsg.style.display = 'block';
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save Changes';
+            return;
+        }
+
+        // 3. Success
+        successMsg.style.display = 'block';
+
+        setTimeout(() => {
+            document.getElementById('changePasswordModal').style.display = 'none';
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save Changes';
+        }, 1500);
+
+    } catch (err) {
+        console.error('Change password error:', err);
+        errorMsg.textContent = getErrorMessage(err, 'Network error or server unreachable. Please check your connection and try again.');
+        errorMsg.style.display = 'block';
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Changes';
+    }
+}
 
 // ==========================================
 // FILTER BUTTONS
@@ -191,16 +649,20 @@ async function fetchAnalytics(range, from, to) {
 
     try {
         const token = sessionStorage.getItem('smartmenyu_token');
-        const fetchOptions = { 
-            headers: { 'Authorization': `Bearer ${token}` },
-            credentials: 'include' 
-        };
+        const fetchOptions = { headers: { 'Authorization': `Bearer ${token}` } };
         const response = await fetch(url, fetchOptions);
 
         if (response.status === 401 || response.status === 403) {
-            console.warn('Authentication failed (401/403). Backend might still be locked.');
+            // Credentials expired or changed — force re-login
+            sessionStorage.removeItem('smartmenyu_admin_user');
+            sessionStorage.removeItem('smartmenyu_token');
+            storedUsername = '';
+            document.getElementById('dashboardContent').style.display = 'none';
+            document.getElementById('loginOverlay').style.display = 'flex';
+            document.getElementById('loginError').textContent = 'Session expired. Please log in again.';
+            document.getElementById('loginError').style.display = 'block';
             showLoading(false);
-            showEmpty(); // Show empty state instead of redirecting
+            initLogin();
             return;
         }
 
@@ -297,14 +759,9 @@ function escapeHtml(unsafe) {
 }
 
 function getErrorMessage(err, defaultMsg = "An unexpected error occurred. Please try again.") {
-    console.error("🔍 Audit Log:", err);
+    console.error("Frontend Error Handler:", err);
     
-    // 1. Handle Network Errors (Browser-level)
-    if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
-        return "Network Error: Could not reach backend server. Please check your internet or if the server is down.";
-    }
-
-    // 2. Handle known friendly phrases from backend
+    // If the error message already looks user-friendly (like our specific DB error), return it
     const friendlyPhrases = ['database connection error', 'render environment variables', 'missing in render'];
     const lowerMsg = (err.message || "").toLowerCase();
     const lowerDefault = (defaultMsg || "").toLowerCase();
@@ -313,12 +770,12 @@ function getErrorMessage(err, defaultMsg = "An unexpected error occurred. Please
         return err.message || defaultMsg;
     }
 
-    // 3. Mask technical details for unknown errors
-    const technicalKeywords = ['prisma', 'sql', 'stack', 'unexpected token', 'json', 'near', 'syntax'];
+    // Mask technical details: if message contains keywords like 'Prisma', 'SQL', etc.
+    const technicalKeywords = ['prisma', 'sql', 'stack', 'unexpected token', 'json', 'http'];
+    
     if (technicalKeywords.some(kw => lowerMsg.includes(kw))) {
         return defaultMsg;
     }
-    
     return err.message || defaultMsg;
 }
 

@@ -91,16 +91,20 @@ app.get("/", (req, res) => {
 // Detailed Diagnostic Health Check (Admin Only)
 app.get("/api/admin/health", async (req, res) => {
     const health = {
-        status: "starting",
+        status: "checking",
         timestamp: new Date().toISOString(),
-        env: {
-            NODE_ENV: process.env.NODE_ENV || 'development',
+        environment: {
             DATABASE_URL: process.env.DATABASE_URL ? "✅ Present" : "❌ Missing",
             JWT_SECRET: process.env.JWT_SECRET ? "✅ Present" : "⚠️ Using Fallback",
+            ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ? "✅ Present" : "❌ Missing",
             ANALYTICS_USERNAME: process.env.ANALYTICS_USERNAME ? "✅ Present" : "❌ Missing",
-            ADMIN_ANALYTICS_PASSWORD: process.env.ADMIN_ANALYTICS_PASSWORD ? "✅ Present" : "❌ Missing"
+            ANALYTICS_PASSWORD: (process.env.ADMIN_ANALYTICS_PASSWORD || process.env.ANALYTICS_PASSWORD) ? "✅ Present" : "❌ Missing",
+            FORGOT_PASSWORD_SECRET: process.env.FORGOT_PASSWORD_SECRET ? "✅ Present" : "❌ Missing"
         },
-        database: { connected: false, error: null }
+        database: {
+            connected: false,
+            error: null
+        }
     };
 
     try {
@@ -110,29 +114,9 @@ app.get("/api/admin/health", async (req, res) => {
     } catch (err) {
         health.database.error = err.message;
         health.status = "error";
-        console.error("❌ [HEALTH CHECK FAILED]:", err.message);
     }
-    res.json(health);
-});
 
-// Added DB diagnostic route
-app.get("/api/db-test", async (req, res) => {
-    try {
-        const result = await prisma.$queryRaw`SELECT 1 as connection_test`;
-        res.json({ 
-            success: true, 
-            message: "Database connection successful!", 
-            data: result,
-            info: "Prisma client initialized and connected to Supabase."
-        });
-    } catch (error) {
-        console.error("❌ [DB TEST FAILED]:", error);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message,
-            hint: "Check your DATABASE_URL in Render. Ensure it includes ?sslmode=require"
-        });
-    }
+    res.json(health);
 });
 
 // ==========================================
@@ -165,66 +149,49 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key-change-in-prod
 
 // Standard login endpoint to issue JWT tokens
 app.post("/api/login", authLimiter, (req, res) => {
-    try {
-        const { username, password, targetSlug } = req.body;
-        
-        if (!username || !password) {
-            return res.status(400).json({ message: "Username and password required" });
-        }
-
-        // Initialize variables to avoid ReferenceError
-        let expectedPassword = '';
-        let expectedUsername = '';
-        let scope = 'admin';
-
-        // Resilience: Fallback to 'admin' if ANALYTICS_USERNAME is missing from Render settings
-        const adminUsername = process.env.ANALYTICS_USERNAME || 'admin';
-        const adminPassword = process.env.ADMIN_ANALYTICS_PASSWORD || process.env.ANALYTICS_PASSWORD;
-
-        if (targetSlug) {
-            const slugUpper = targetSlug.toUpperCase().replace(/-/g, '_');
-            expectedPassword = process.env[`${slugUpper}_ANALYTICS_PASSWORD`] || adminPassword;
-            expectedUsername = adminUsername; 
-            scope = targetSlug;
-        } else if (username === adminUsername || username === 'admin' || username === 'menyu@admin') {
-            expectedPassword = adminPassword;
-            expectedUsername = username; 
-            scope = 'admin';
-        } else {
-            logSecurityEvent(req, 'LOGIN_FAILED', { username, reason: 'Invalid scope' });
-            return res.status(401).json({ message: "Unauthorized credentials. Please check your Render settings." });
-        }
-
-        // Safeguard: If no password is set in Render, deny login until it is configured
-        if (!expectedPassword) {
-            console.error("⚠️ [AUTH ERROR] ANALYTICS_PASSWORD is not set in Render environment variables.");
-            return res.status(500).json({ 
-                message: "Server configuration error: ANALYTICS_PASSWORD is missing in Render settings.",
-                detail: "Check Render Environment Variables for ADMIN_ANALYTICS_PASSWORD"
-            });
-        }
-
-        // Secure Comparison
-        const isPasswordValid = bcrypt.compareSync(password, String(expectedPassword)) || (password === expectedPassword);
-        const isUsernameValid = (username === expectedUsername) || (username === adminUsername) || (username === 'admin') || (username === 'menyu@admin');
-
-        if (!isPasswordValid || !isUsernameValid) {
-            logSecurityEvent(req, 'LOGIN_FAILED', { username, scope });
-            return res.status(401).json({ message: "Invalid username or password. Please verify your credentials." });
-        }
-
-        // Generate token valid for 8 hours
-        const tokenToken = jwt.sign({ username, scope }, JWT_SECRET, { expiresIn: '8h' });
-        logSecurityEvent(req, 'LOGIN_SUCCESS', { username, scope });
-        
-        res.json({ token: tokenToken, scope });
-    } catch (err) {
-        console.error("❌ [LOGIN CRITICAL ERROR]:", err);
-        res.status(500).json({ 
-            message: "A server error occurred during login.",
-            detail: err.message
-        });
+    const { username, password, targetSlug } = req.body;
+    
+    if (!username || !password) {
+        return res.status(400).json({ message: "Username and password required" });
     }
+
+    // Resilience: Fallback to 'admin' if ANALYTICS_USERNAME is missing from Render settings
+    const adminUsername = process.env.ANALYTICS_USERNAME || 'admin';
+    const adminPassword = process.env.ADMIN_ANALYTICS_PASSWORD || process.env.ANALYTICS_PASSWORD;
+
+    if (targetSlug) {
+        const slugUpper = targetSlug.toUpperCase().replace(/-/g, '_');
+        expectedPassword = process.env[`${slugUpper}_ANALYTICS_PASSWORD`] || adminPassword;
+        expectedUsername = adminUsername; 
+        scope = targetSlug;
+    } else if (username === adminUsername || username === 'admin' || username === 'menyu@admin') {
+        expectedPassword = adminPassword;
+        expectedUsername = username; // Allow the entered username for matching if it's an admin variant
+        scope = 'admin';
+    } else {
+        logSecurityEvent(req, 'LOGIN_FAILED', { username, reason: 'Invalid scope' });
+        return res.status(401).json({ message: "Unauthorized. Please check your Render environment settings." });
+    }
+
+    // Safeguard: If no password is set in Render, deny login until it is configured
+    if (!expectedPassword) {
+        console.error("⚠️ [AUTH ERROR] ANALYTICS_PASSWORD is not set in Render environment variables.");
+        return res.status(500).json({ message: "Server configuration error: ANALYTICS_PASSWORD is missing in Render settings." });
+    }
+
+    const isPasswordValid = bcrypt.compareSync(password, expectedPassword) || (password === expectedPassword);
+    const isUsernameValid = (username === expectedUsername) || (username === adminUsername) || (username === 'admin') || (username === 'menyu@admin');
+
+    if (!isPasswordValid || !isUsernameValid) {
+        logSecurityEvent(req, 'LOGIN_FAILED', { username, scope });
+        return res.status(401).json({ message: "Invalid username or password. Please verify your Render environment variables." });
+    }
+
+    // Generate token valid for 8 hours
+    const token = jwt.sign({ username, scope }, JWT_SECRET, { expiresIn: '8h' });
+    logSecurityEvent(req, 'LOGIN_SUCCESS', { username, scope });
+    
+    res.json({ token, scope });
 });
 
 // Middleware to protect routes
@@ -273,8 +240,12 @@ app.get("/health", (req, res) => {
 // ==========================================
 // SECURITY MONITORING
 // ==========================================
-app.get("/api/admin/security-logs", (req, res) => {
-    // [Public Access] Authentication removed as per request
+app.get("/api/admin/security-logs", verifyToken, (req, res) => {
+    // Only 'admin' scope can view global security logs
+    if (req.user.scope !== 'admin') {
+        logSecurityEvent(req, 'LOG_VIEWER_FAILED', { username: req.user.username, reason: 'Insufficient scope' })
+        return res.status(403).json({ message: "Forbidden" })
+    }
 
     try {
         const logPath = path.join(__dirname, 'security.log')
@@ -368,13 +339,16 @@ app.post("/api/:slug/order", eventLimiter, async (req, res) => {
 })
 
 // Update payment status of an order (restaurant owner changes status)
-app.post("/api/:slug/orders/:orderId/status", async (req, res) => {
+app.post("/api/:slug/orders/:orderId/status", verifyToken, async (req, res) => {
     try {
         const { slug } = req.params
         const { orderId } = req.params
         const { status } = req.body
 
-        // [Public Access] Authentication removed as per request
+        // Scope protection: admin can edit anything, otherwise must match slug
+        if (req.user.scope !== 'admin' && req.user.scope !== slug) {
+            return res.status(403).json({ message: "Forbidden" })
+        }
 
         // Validate status value
         const validStatuses = ["paid", "unpaid", "ignore"]
@@ -407,11 +381,14 @@ app.post("/api/:slug/orders/:orderId/status", async (req, res) => {
 })
 
 // Delete an order (restaurant owner removes an order from analytics)
-app.post("/api/:slug/orders/:orderId/delete", async (req, res) => {
+app.post("/api/:slug/orders/:orderId/delete", verifyToken, async (req, res) => {
     try {
         const { slug, orderId } = req.params
 
-        // [Public Access] Authentication removed as per request
+        // Scope protection: admin can edit anything, otherwise must match slug
+        if (req.user.scope !== 'admin' && req.user.scope !== slug) {
+            return res.status(403).json({ message: "Forbidden" })
+        }
 
         // Find restaurant
         const restaurant = await prisma.restaurant.findUnique({ where: { slug } })
@@ -505,11 +482,14 @@ app.post("/api/:slug/scan", eventLimiter, async (req, res) => {
 // ADMIN ANALYTICS — GLOBAL DASHBOARD
 // ==========================================
 
-app.get("/api/admin/analytics", async (req, res) => {
+app.get("/api/admin/analytics", verifyToken, async (req, res) => {
     try {
         const { range, from, to } = req.query
 
-        // [Public Access] Authentication removed as per request
+        // Only 'admin' scope can view global analytics
+        if (req.user.scope !== 'admin') {
+            return res.status(403).json({ message: "Forbidden" })
+        }
 
         // Calculate date range (IST = UTC+5:30)
         const now = new Date()
@@ -651,12 +631,15 @@ app.get("/api/admin/analytics", async (req, res) => {
 // ANALYTICS — QUERY ENDPOINT
 // ==========================================
 
-app.get("/api/:slug/analytics", async (req, res) => {
+app.get("/api/:slug/analytics", verifyToken, async (req, res) => {
     try {
         const { slug } = req.params
         const { range, from, to } = req.query
 
-        // [Public Access] Authentication removed as per request
+        // Scope protection: admin can view anything, otherwise must match slug
+        if (req.user.scope !== 'admin' && req.user.scope !== slug) {
+            return res.status(403).json({ message: "Forbidden" })
+        }
 
         // Find restaurant
         const restaurant = await prisma.restaurant.findUnique({ where: { slug } })

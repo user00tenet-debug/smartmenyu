@@ -170,7 +170,7 @@
   </div>
 
   <script>
-    const config = { apiBaseUrl: '' }; // Uses relative paths through Next.js rewrites
+    const config = { apiBaseUrl: '/api' };
     
     function escapeHtml(unsafe) {
         if (!unsafe || typeof unsafe !== 'string') return unsafe;
@@ -185,19 +185,24 @@
     async function loadLogs() {
       const tbody = document.getElementById('logsBody');
       
-      // Authentication removed as per user request
+      // Get admin credentials from sessionStorage (like the main dashboard does)
+      const token = sessionStorage.getItem('smartmenyu_token');
+      const cachedUser = sessionStorage.getItem('smartmenyu_admin_user');
+      if (!token || !cachedUser) {
+        window.location.href = 'analytics.html'; // Redirect to login
+        return;
+      }
+      
       tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Loading logs...</td></tr>';
       
       try {
         const url = `${config.apiBaseUrl}/api/admin/security-logs`;
-        const fetchOptions = { 
-            credentials: 'include'
-        };
+        const fetchOptions = { headers: { 'Authorization': `Bearer ${token}` } };
         
         const response = await fetch(url, fetchOptions);
         if (response.status === 401 || response.status === 403) {
-            console.warn('Authentication failed (401/403). Backend might still be locked.');
-            tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Authentication required. Please contact admin.</td></tr>';
+            sessionStorage.removeItem('smartmenyu_token');
+            window.location.href = 'analytics.html';
             return;
         }
         
