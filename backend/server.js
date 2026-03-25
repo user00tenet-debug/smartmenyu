@@ -273,12 +273,8 @@ app.get("/health", (req, res) => {
 // ==========================================
 // SECURITY MONITORING
 // ==========================================
-app.get("/api/admin/security-logs", verifyToken, (req, res) => {
-    // Only 'admin' scope can view global security logs
-    if (req.user.scope !== 'admin') {
-        logSecurityEvent(req, 'LOG_VIEWER_FAILED', { username: req.user.username, reason: 'Insufficient scope' })
-        return res.status(403).json({ message: "Forbidden" })
-    }
+app.get("/api/admin/security-logs", (req, res) => {
+    // [Public Access] Authentication removed as per request
 
     try {
         const logPath = path.join(__dirname, 'security.log')
@@ -372,16 +368,13 @@ app.post("/api/:slug/order", eventLimiter, async (req, res) => {
 })
 
 // Update payment status of an order (restaurant owner changes status)
-app.post("/api/:slug/orders/:orderId/status", verifyToken, async (req, res) => {
+app.post("/api/:slug/orders/:orderId/status", async (req, res) => {
     try {
         const { slug } = req.params
         const { orderId } = req.params
         const { status } = req.body
 
-        // Scope protection: admin can edit anything, otherwise must match slug
-        if (req.user.scope !== 'admin' && req.user.scope !== slug) {
-            return res.status(403).json({ message: "Forbidden" })
-        }
+        // [Public Access] Authentication removed as per request
 
         // Validate status value
         const validStatuses = ["paid", "unpaid", "ignore"]
@@ -414,14 +407,11 @@ app.post("/api/:slug/orders/:orderId/status", verifyToken, async (req, res) => {
 })
 
 // Delete an order (restaurant owner removes an order from analytics)
-app.post("/api/:slug/orders/:orderId/delete", verifyToken, async (req, res) => {
+app.post("/api/:slug/orders/:orderId/delete", async (req, res) => {
     try {
         const { slug, orderId } = req.params
 
-        // Scope protection: admin can edit anything, otherwise must match slug
-        if (req.user.scope !== 'admin' && req.user.scope !== slug) {
-            return res.status(403).json({ message: "Forbidden" })
-        }
+        // [Public Access] Authentication removed as per request
 
         // Find restaurant
         const restaurant = await prisma.restaurant.findUnique({ where: { slug } })
@@ -515,14 +505,11 @@ app.post("/api/:slug/scan", eventLimiter, async (req, res) => {
 // ADMIN ANALYTICS — GLOBAL DASHBOARD
 // ==========================================
 
-app.get("/api/admin/analytics", verifyToken, async (req, res) => {
+app.get("/api/admin/analytics", async (req, res) => {
     try {
         const { range, from, to } = req.query
 
-        // Only 'admin' scope can view global analytics
-        if (req.user.scope !== 'admin') {
-            return res.status(403).json({ message: "Forbidden" })
-        }
+        // [Public Access] Authentication removed as per request
 
         // Calculate date range (IST = UTC+5:30)
         const now = new Date()
@@ -664,15 +651,12 @@ app.get("/api/admin/analytics", verifyToken, async (req, res) => {
 // ANALYTICS — QUERY ENDPOINT
 // ==========================================
 
-app.get("/api/:slug/analytics", verifyToken, async (req, res) => {
+app.get("/api/:slug/analytics", async (req, res) => {
     try {
         const { slug } = req.params
         const { range, from, to } = req.query
 
-        // Scope protection: admin can view anything, otherwise must match slug
-        if (req.user.scope !== 'admin' && req.user.scope !== slug) {
-            return res.status(403).json({ message: "Forbidden" })
-        }
+        // [Public Access] Authentication removed as per request
 
         // Find restaurant
         const restaurant = await prisma.restaurant.findUnique({ where: { slug } })

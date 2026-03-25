@@ -16,64 +16,12 @@
     <!-- Login Screen -->
     <div class="login-overlay" id="loginOverlay">
         <div class="login-card">
-            <div class="login-icon">🔒</div>
+            <div class="login-icon" style="font-size: 3rem; margin-bottom: 1rem; text-align: center;">🔑</div>
             <h2 class="login-title">Analytics Dashboard</h2>
-            <p class="login-subtitle">Enter password to continue</p>
+            <p class="login-subtitle" style="text-align: center; margin-bottom: 2rem;">Paradise Restaurant - SmartMenyu</p>
             <div class="login-form">
-                <input type="text" id="loginUsername" class="login-input" placeholder="Username" autocomplete="off">
-                <input type="password" id="loginPassword" class="login-input" placeholder="Password" autocomplete="off">
-                <div style="display: flex; align-items: center; gap: 10px; justify-content: center; margin-top: 4px;">
-                    <canvas id="captchaCanvas" width="140" height="45" style="border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-warm);"></canvas>
-                    <button type="button" id="refreshCaptcha" style="background: none; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px; cursor: pointer; font-size: 1.1rem;" title="Refresh Captcha">🔄</button>
-                </div>
-                <input type="text" id="captchaInput" class="login-input" placeholder="Enter Captcha" autocomplete="off" maxlength="4" style="letter-spacing: 4px;">
-                <p class="login-error" id="loginError" style="display:none;">Wrong username or password. Try again.</p>
-                <button class="login-btn" id="loginBtn">Unlock</button>
-                <div class="login-footer" style="margin-top: 1rem; text-align: center;">
-                    <a href="#" id="forgotPwLink" class="forgot-pw-link" style="color: var(--color-primary); text-decoration: none; font-size: 0.9rem; font-weight: 500;">Forgot Password?</a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Forgot Password: Step 1 (Verify) -->
-        <div id="forgotStep1" class="login-card" style="display:none;">
-            <div class="login-icon">🔍</div>
-            <h2 class="login-title">Forgot Password</h2>
-            <p class="login-subtitle">Verify restaurant details</p>
-            <div class="login-form">
-                <input type="text" id="forgotRestName" class="login-input" placeholder="Restaurant Name" autocomplete="off">
-                <input type="tel" id="forgotPhone" class="login-input" placeholder="Registered Phone" autocomplete="off">
-                <div class="login-actions" style="display: flex; gap: 10px;">
-                    <button id="backToLoginBtn" class="login-btn btn-secondary" style="background: #e5e7eb; color: #374151;">Back</button>
-                    <button class="login-btn" id="verifyStep1Btn">Submit</button>
-                </div>
-                <p class="login-error" id="forgotError1" style="display:none;"></p>
-            </div>
-        </div>
-
-        <!-- Forgot Password: Step 2 (Reset) -->
-        <div id="forgotStep2" class="login-card" style="display:none;">
-            <div class="login-icon">🔑</div>
-            <h2 class="login-title">Reset Password</h2>
-            <p class="login-subtitle">Enter secret code and new password</p>
-            <div class="login-form">
-                <input type="text" id="forgotSecretCode" class="login-input" placeholder="Secret Code" autocomplete="off">
-                <input type="password" id="forgotNewPw" class="login-input" placeholder="New Password" autocomplete="off">
-                <div class="pw-strength" id="forgotPwStrength" style="display:none;">
-                    <div class="pw-strength-bar"><div class="pw-strength-fill" id="forgotPwStrengthFill"></div></div>
-                    <span class="pw-strength-label" id="forgotPwStrengthLabel">Weak</span>
-                    <ul class="pw-rules">
-                        <li id="forgotRule8">✗ At least 8 characters</li>
-                        <li id="forgotRuleUpper">✗ One uppercase letter</li>
-                        <li id="forgotRuleLower">✗ One lowercase letter</li>
-                        <li id="forgotRuleNum">✗ One number</li>
-                        <li id="forgotRuleSpecial">✗ One special symbol</li>
-                    </ul>
-                </div>
-                <input type="password" id="forgotConfirmPw" class="login-input" placeholder="Confirm New Password" autocomplete="off">
-                <button class="login-btn" id="resetPwBtn">Change Password</button>
-                <p class="login-error" id="forgotError2" style="display:none;"></p>
-                <p id="forgotSuccess" class="login-success" style="display:none; color: #10b981; font-weight: 600; text-align: center; margin-top: 1rem;">Password changed successfully!</p>
+                <button class="login-btn" id="loginBtn">Login</button>
+                <p class="login-error" id="loginError" style="display:none;"></p>
             </div>
         </div>
     </div>
@@ -86,7 +34,6 @@
                 <div class="header-title-row">
                     <h1 class="header-title">📊 Paradise Analytics</h1>
                     <div class="header-right">
-                        <button class="change-password-btn" id="changePwBtn" title="Change Password">🔑 Change Password</button>
                         <button class="logout-btn" id="logoutBtn" title="Logout">Logout</button>
                     </div>
                 </div>
@@ -202,33 +149,6 @@
         </main>
     </div><!-- end dashboardContent -->
 
-    <!-- Change Password Modal -->
-    <div class="modal-overlay" id="changePasswordModal" style="display:none;">
-        <div class="modal-card">
-            <h3 class="modal-title">Change Dashboard Password</h3>
-            <div class="modal-form">
-                <div class="form-group">
-                    <label for="currentPassword">Current Password</label>
-                    <input type="password" id="currentPassword" class="modal-input" placeholder="Enter current password">
-                </div>
-                <div class="form-group">
-                    <label for="newPassword">New Password</label>
-                    <input type="password" id="newPassword" class="modal-input" placeholder="Enter new password">
-                    <div class="pw-strength" id="modalPwStrength" style="display:none;">
-                        <div class="pw-strength-bar"><div class="pw-strength-fill" id="modalPwStrengthFill"></div></div>
-                        <span class="pw-strength-label" id="modalPwStrengthLabel">Weak</span>
-                        <ul class="pw-rules">
-                            <li id="modalRule8">✗ At least 8 characters</li>
-                            <li id="modalRuleUpper">✗ One uppercase letter</li>
-                            <li id="modalRuleLower">✗ One lowercase letter</li>
-                            <li id="modalRuleNum">✗ One number</li>
-                            <li id="modalRuleSpecial">✗ One special symbol</li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="confirmPassword">Confirm New Password</label>
-                    <input type="password" id="confirmPassword" class="modal-input" placeholder="Confirm new password">
                 </div>
                 <p id="modalError" class="modal-error">Error message here</p>
                 <p id="modalSuccess" class="modal-success">Password changed successfully!</p>

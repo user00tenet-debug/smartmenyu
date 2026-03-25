@@ -20,44 +20,11 @@
     <!-- Login Overlay -->
     <div id="loginOverlay" class="login-overlay" style="display:flex;">
         <div class="login-card">
+            <div class="login-icon" style="font-size: 3rem; margin-bottom: 1rem; text-align: center;">🔑</div>
             <h2 class="login-title">Admin Access</h2>
-            <p class="login-subtitle" style="text-align: center;">SmartMenyu Central Dashboard</p>
-            <input type="text" id="loginUsername" class="login-input" placeholder="Enter Admin Username" autocomplete="off">
-            <input type="password" id="loginPassword" class="login-input" placeholder="Enter Admin Password" autocomplete="off">
-            <div style="display: flex; align-items: center; gap: 10px; justify-content: center; margin-top: 4px;">
-                <canvas id="captchaCanvas" width="140" height="45" style="border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-warm);"></canvas>
-                <button type="button" id="refreshCaptcha" style="background: none; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px; cursor: pointer; font-size: 1.1rem;" title="Refresh Captcha">🔄</button>
-            </div>
-            <input type="text" id="captchaInput" class="login-input" placeholder="Enter Captcha" autocomplete="off" maxlength="4" style="letter-spacing: 4px;">
-            <button id="loginBtn" class="login-btn">Unlock Dashboard</button>
-            <div class="login-footer" style="margin-top: 1rem; text-align: center;">
-                <a href="#" id="forgotPwLink" class="forgot-pw-link" style="color: var(--color-primary); text-decoration: none; font-size: 0.9rem; font-weight: 500;">Forgot Password?</a>
-            </div>
-            <p id="loginError" class="login-error" style="display:none;">Incorrect username or password</p>
-        </div>
-
-
-        <!-- Forgot Password: Step 2 (Reset) -->
-        <div id="forgotStep2" class="login-card" style="display:none;">
-            <h2 class="login-title">Reset Password</h2>
-            <p class="login-subtitle" style="text-align: center;">Enter secret code and new password</p>
-            <input type="text" id="forgotSecretCode" class="login-input" placeholder="Enter Secret Code" autocomplete="off">
-            <input type="password" id="forgotNewPw" class="login-input" placeholder="Enter New Password" autocomplete="off">
-            <div class="pw-strength" id="forgotPwStrength" style="display:none;">
-                <div class="pw-strength-bar"><div class="pw-strength-fill" id="forgotPwStrengthFill"></div></div>
-                <span class="pw-strength-label" id="forgotPwStrengthLabel">Weak</span>
-                <ul class="pw-rules">
-                    <li id="forgotRule8">✗ At least 8 characters</li>
-                    <li id="forgotRuleUpper">✗ One uppercase letter</li>
-                    <li id="forgotRuleLower">✗ One lowercase letter</li>
-                    <li id="forgotRuleNum">✗ One number</li>
-                    <li id="forgotRuleSpecial">✗ One special symbol</li>
-                </ul>
-            </div>
-            <input type="password" id="forgotConfirmPw" class="login-input" placeholder="Confirm New Password" autocomplete="off">
-            <button id="resetPwBtn" class="login-btn">Change Password</button>
-            <p id="forgotError2" class="login-error" style="display:none;"></p>
-            <p id="forgotSuccess" class="login-success" style="display:none; color: #10b981; font-weight: 600; text-align: center; margin-top: 1rem;">Password changed successfully!</p>
+            <p class="login-subtitle" style="text-align: center; margin-bottom: 2rem;">SmartMenyu Central Dashboard</p>
+            <button id="loginBtn" class="login-btn">Login</button>
+            <p id="loginError" class="login-error" style="display:none;"></p>
         </div>
     </div>
 
@@ -71,7 +38,6 @@
                     <div class="header-right">
                         <span class="header-restaurant" id="restaurantName">All Venues</span>
                         <a href="security-logs.html" class="change-password-btn" style="background-color: transparent; color: #f87171; border: 1px solid #f87171; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem;" title="View Security Logs">🔒 Security Logs</a>
-                        <button class="change-password-btn" id="changePwBtn" title="Change Password">🔑 Change Password</button>
                         <button class="logout-btn" id="logoutBtn" title="Logout">Logout</button>
                     </div>
                 </div>
@@ -174,27 +140,6 @@
         </main>
     </div>
 
-    <!-- Change Password Modal -->
-    <div class="modal-overlay" id="changePasswordModal" style="display:none;">
-        <div class="modal-card">
-            <h3 class="modal-title">Change Admin Password</h3>
-            <div class="modal-form">
-                <div class="form-group">
-                    <label for="currentPassword">Current Password</label>
-                    <input type="password" id="currentPassword" class="modal-input" placeholder="Enter current password">
-                </div>
-                <div class="form-group">
-                    <label for="newPassword">New Password</label>
-                    <input type="password" id="newPassword" class="modal-input" placeholder="Enter new password">
-                    <div class="pw-strength" id="modalPwStrength" style="display:none;">
-                        <div class="pw-strength-bar"><div class="pw-strength-fill" id="modalPwStrengthFill"></div></div>
-                        <span class="pw-strength-label" id="modalPwStrengthLabel">Weak</span>
-                        <ul class="pw-rules">
-                            <li id="modalRule8">✗ At least 8 characters</li>
-                            <li id="modalRuleUpper">✗ One uppercase letter</li>
-                            <li id="modalRuleLower">✗ One lowercase letter</li>
-                            <li id="modalRuleNum">✗ One number</li>
-                            <li id="modalRuleSpecial">✗ One special symbol</li>
                         </ul>
                     </div>
                 </div>

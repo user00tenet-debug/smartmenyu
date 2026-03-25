@@ -185,27 +185,19 @@
     async function loadLogs() {
       const tbody = document.getElementById('logsBody');
       
-      // Get admin credentials from sessionStorage (like the main dashboard does)
-      const token = sessionStorage.getItem('smartmenyu_token');
-      const cachedUser = sessionStorage.getItem('smartmenyu_admin_user');
-      if (!token || !cachedUser) {
-        window.location.href = 'analytics.html'; // Redirect to login
-        return;
-      }
-      
+      // Authentication removed as per user request
       tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Loading logs...</td></tr>';
       
       try {
         const url = `${config.apiBaseUrl}/api/admin/security-logs`;
         const fetchOptions = { 
-            headers: { 'Authorization': `Bearer ${token}` },
             credentials: 'include'
         };
         
         const response = await fetch(url, fetchOptions);
         if (response.status === 401 || response.status === 403) {
-            sessionStorage.removeItem('smartmenyu_token');
-            window.location.href = 'analytics.html';
+            console.warn('Authentication failed (401/403). Backend might still be locked.');
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Authentication required. Please contact admin.</td></tr>';
             return;
         }
         

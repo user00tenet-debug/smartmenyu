@@ -23,12 +23,11 @@ let currentCaptcha = '';
 // ==========================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Check if already authenticated in this session
-    if (storedUsername && storedPassword) {
+    // Check if already authenticated or just show login
+    if (storedUsername && sessionStorage.getItem('smartmenyu_token')) {
         unlockDashboard();
     } else {
         initLogin();
-        initForgotPassword();
     }
 });
 
@@ -38,42 +37,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initLogin() {
     const loginBtn = document.getElementById('loginBtn');
-    const usernameInput = document.getElementById('loginUsername');
-    const passwordInput = document.getElementById('loginPassword');
-    const captchaInput = document.getElementById('captchaInput');
-    const loginError = document.getElementById('loginError');
+    if (!loginBtn) return;
 
     // Reset button state
-    loginBtn.textContent = 'Unlock';
+    loginBtn.textContent = 'Login';
     loginBtn.disabled = false;
 
-    // Prevent duplicate event listeners on re-init (after logout)
+    // Prevent duplicate event listeners
     if (!loginBtn.dataset.initialized) {
         loginBtn.dataset.initialized = 'true';
-        loginBtn.addEventListener('click', () => attemptLogin());
-
-        // Allow Enter key to submit
-        [usernameInput, passwordInput, captchaInput].forEach(input => {
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') attemptLogin();
-            });
-        });
-
-        // Refresh captcha button
-        const refreshBtn = document.getElementById('refreshCaptcha');
-        if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => generateCaptcha());
-        }
+        loginBtn.addEventListener('click', () => simplifiedLogin());
     }
+}
 
-    // Generate initial captcha
-    generateCaptcha();
+async function simplifiedLogin() {
+    const loginBtn = document.getElementById('loginBtn');
+    loginBtn.textContent = 'Connecting...';
+    loginBtn.disabled = true;
 
-    // Focus the first empty field
-    if (!usernameInput.value) {
-        usernameInput.focus();
-    } else {
-        passwordInput.focus();
+    try {
+        unlockDashboard();
+    } catch (err) {
+        console.error('Login failed:', err);
+        const loginError = document.getElementById('loginError');
+        if (loginError) {
+            loginError.textContent = 'Failed to load dashboard. Please try again.';
+            loginError.style.display = 'block';
+        }
+        loginBtn.textContent = 'Login';
+        loginBtn.disabled = false;
     }
 }
 
@@ -141,312 +133,7 @@ function drawCaptcha(text) {
     }
 }
 
-async function attemptLogin() {
-    const usernameInput = document.getElementById('loginUsername');
-    const passwordInput = document.getElementById('loginPassword');
-    const loginError = document.getElementById('loginError');
-    const loginBtn = document.getElementById('loginBtn');
-    
-    const username = usernameInput.value.trim();
-    const password = passwordInput.value.trim();
-    const captchaInput = document.getElementById('captchaInput');
-    const captchaValue = captchaInput ? captchaInput.value.trim() : '';
-
-    if (!username) {
-        usernameInput.focus();
-        return;
-    }
-    if (!password) {
-        passwordInput.focus();
-        return;
-    }
-    if (captchaValue !== currentCaptcha) {
-        loginError.textContent = 'Invalid captcha. Please try again.';
-        loginError.style.display = 'block';
-        if (captchaInput) {
-            captchaInput.classList.add('shake');
-            setTimeout(() => captchaInput.classList.remove('shake'), 400);
-            captchaInput.value = '';
-            captchaInput.focus();
-        }
-        generateCaptcha();
-        loginBtn.textContent = 'Unlock';
-        loginBtn.disabled = false;
-        return;
-    }
-
-    // Disable button while checking
-    loginBtn.textContent = 'Checking...';
-    loginBtn.disabled = true;
-
-    try {
-        // Step 1: Login to get JWT Token
-        const loginUrl = `${analyticsConfig.apiBaseUrl}/api/login`;
-        const loginResponse = await fetch(loginUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ username, password, targetSlug: analyticsConfig.slug })
-        });
-
-        if (!loginResponse.ok) {
-            let errorMsg = `HTTP ${loginResponse.status}`;
-            try {
-                const errorData = await loginResponse.json();
-                if (errorData && errorData.message) {
-                    errorMsg = errorData.message;
-                }
-            } catch (jsonErr) {}
-            throw new Error(errorMsg);
-        }
-
-        const loginData = await loginResponse.json();
-        const token = loginData.token;
-
-        // Credentials correct — save token and unlock
-        storedUsername = username;
-        sessionStorage.setItem('smartmenyu_admin_user', username);
-        sessionStorage.setItem('smartmenyu_token', token);
-
-        // Step 2: Fetch the analytics data using the new token
-        const dataUrl = `${analyticsConfig.apiBaseUrl}/api/${analyticsConfig.slug}/analytics?range=today`;
-        const dataResponse = await fetch(dataUrl, {
-            headers: { 'Authorization': `Bearer ${token}` },
-            credentials: 'include'
-        });
-        
-        if (!dataResponse.ok) {
-            let errorMsg = 'Failed to fetch data';
-            try {
-                const errorData = await dataResponse.json();
-                if (errorData && errorData.message) {
-                    errorMsg = errorData.message;
-                }
-            } catch (jsonErr) {}
-            throw new Error(errorMsg);
-        }
-
-        const data = await dataResponse.json();
-        currentData = data;
-
-        unlockDashboard(data);
-    } catch (err) {
-        console.error('❌ [AUTH ERROR] Login failed:', err);
-        
-        // Detailed diagnostics for developers
-        if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
-            console.warn('💡 Possible CORS or URL issue. Check if backend is running and allows your origin.');
-        }
-
-        loginError.textContent = getErrorMessage(err, 'Connection error. Try again.');
-        loginError.style.display = 'block';
-        loginBtn.textContent = 'Unlock';
-        loginBtn.disabled = false;
-    }
-}
-
-// ==========================================
-// PASSWORD STRENGTH CHECKER (shared)
-// ==========================================
-
-function checkPasswordStrength(pw, prefix) {
-    const rules = {
-        '8': pw.length >= 8,
-        'Upper': /[A-Z]/.test(pw),
-        'Lower': /[a-z]/.test(pw),
-        'Num': /[0-9]/.test(pw),
-        'Special': /[^A-Za-z0-9]/.test(pw)
-    };
-
-    let passed = 0;
-    for (const [key, ok] of Object.entries(rules)) {
-        const li = document.getElementById(prefix + 'Rule' + key);
-        if (li) {
-            li.textContent = (ok ? '✓ ' : '✗ ') + li.textContent.replace(/^[✓✗]\s*/, '');
-            li.classList.toggle('pass', ok);
-        }
-        if (ok) passed++;
-    }
-
-    // Determine strength level
-    let level = 'weak';
-    if (passed >= 5) level = 'strong';
-    else if (passed >= 3) level = 'medium';
-
-    // Update strength bar fill
-    const fill = document.getElementById(prefix + 'PwStrengthFill');
-    if (fill) {
-        fill.className = 'pw-strength-fill ' + level;
-    }
-
-    // Update strength label
-    const label = document.getElementById(prefix + 'PwStrengthLabel');
-    if (label) {
-        label.textContent = level.charAt(0).toUpperCase() + level.slice(1);
-        label.className = 'pw-strength-label ' + level;
-    }
-
-    // Show/hide the strength container
-    const container = document.getElementById(prefix + 'PwStrength');
-    if (container) {
-        container.style.display = pw.length > 0 ? 'block' : 'none';
-    }
-
-    return passed === 5;
-}
-
-// ==========================================
-// FORGOT PASSWORD
-// ==========================================
-
-function initForgotPassword() {
-    const forgotPwLink = document.getElementById('forgotPwLink');
-    const backToLoginBtn = document.getElementById('backToLoginBtn');
-    const verifyStep1Btn = document.getElementById('verifyStep1Btn');
-    const resetPwBtn = document.getElementById('resetPwBtn');
-
-    const loginCard = document.querySelector('#loginOverlay .login-card:not([id])') || document.querySelector('#loginOverlay .login-card:first-child');
-    const step1Card = document.getElementById('forgotStep1');
-    const step2Card = document.getElementById('forgotStep2');
-
-    let resetTarget = 'paradise'; // Default fallback
-
-    if (!forgotPwLink) return;
-
-    // 1. Show Step 1
-    forgotPwLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        loginCard.style.display = 'none';
-        step1Card.style.display = 'block';
-        document.getElementById('forgotRestName').focus();
-    });
-
-    // 2. Back to Login
-    backToLoginBtn.addEventListener('click', () => {
-        step1Card.style.display = 'none';
-        loginCard.style.display = 'block';
-    });
-
-    // 3. Verify Step 1
-    verifyStep1Btn.addEventListener('click', async () => {
-        const restaurantName = document.getElementById('forgotRestName').value.trim();
-        const phoneNumber = document.getElementById('forgotPhone').value.trim();
-        const errorEl = document.getElementById('forgotError1');
-
-        if (!restaurantName || !phoneNumber) {
-            errorEl.textContent = 'Please fill in both fields.';
-            errorEl.style.display = 'block';
-            return;
-        }
-
-        verifyStep1Btn.disabled = true;
-        verifyStep1Btn.textContent = 'Verifying...';
-        errorEl.style.display = 'none';
-
-        try {
-            const response = await fetch(`${analyticsConfig.apiBaseUrl}/api/forgot-password/verify`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ restaurantName, phoneNumber })
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                errorEl.textContent = result.message || 'Verification failed.';
-                errorEl.style.display = 'block';
-                return;
-            }
-
-            // Success -> Step 2
-            resetTarget = result.target || 'paradise';
-            step1Card.style.display = 'none';
-            step2Card.style.display = 'block';
-            document.getElementById('forgotSecretCode').focus();
-
-        } catch (err) {
-            console.error('Verify error:', err);
-            errorEl.textContent = getErrorMessage(err, 'Connection error. Try again.');
-            errorEl.style.display = 'block';
-        } finally {
-            verifyStep1Btn.disabled = false;
-            verifyStep1Btn.textContent = 'Submit';
-        }
-    });
-
-    // 3.5. Password strength checker for forgot password
-    resetPwBtn.disabled = true;
-    const forgotNewPwInput = document.getElementById('forgotNewPw');
-    if (forgotNewPwInput) {
-        forgotNewPwInput.addEventListener('input', () => {
-            const allPassed = checkPasswordStrength(forgotNewPwInput.value, 'forgot');
-            resetPwBtn.disabled = !allPassed;
-        });
-    }
-
-    // 4. Reset Password
-    resetPwBtn.addEventListener('click', async () => {
-        const secretCode = document.getElementById('forgotSecretCode').value.trim();
-        const newPassword = document.getElementById('forgotNewPw').value.trim();
-        const confirmPw = document.getElementById('forgotConfirmPw').value.trim();
-        const errorEl = document.getElementById('forgotError2');
-        const successEl = document.getElementById('forgotSuccess');
-
-        if (!secretCode || !newPassword || !confirmPw) {
-            errorEl.textContent = 'Please fill in all fields.';
-            errorEl.style.display = 'block';
-            return;
-        }
-
-        if (newPassword !== confirmPw) {
-            errorEl.textContent = 'Passwords do not match.';
-            errorEl.style.display = 'block';
-            return;
-        }
-
-        if (!checkPasswordStrength(newPassword, 'forgot')) {
-            errorEl.textContent = 'Password does not meet the policy requirements.';
-            errorEl.style.display = 'block';
-            return;
-        }
-
-        resetPwBtn.disabled = true;
-        resetPwBtn.textContent = 'Changing...';
-        errorEl.style.display = 'none';
-
-        try {
-            const response = await fetch(`${analyticsConfig.apiBaseUrl}/api/forgot-password/reset`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ secretCode, newPassword, target: resetTarget })
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                errorEl.textContent = result.message || 'Reset failed.';
-                errorEl.style.display = 'block';
-                return;
-            }
-
-            // Success
-            successEl.style.display = 'block';
-            setTimeout(() => {
-                window.location.reload(); // Reload to start fresh
-            }, 2000);
-
-        } catch (err) {
-            console.error('Reset error:', err);
-            errorEl.textContent = getErrorMessage(err, 'Connection error. Try again.');
-            errorEl.style.display = 'block';
-        } finally {
-            resetPwBtn.disabled = false;
-            resetPwBtn.textContent = 'Change Password';
-        }
-    });
-}
+// attemptLogin and initForgotPassword removed in favor of simplifiedLogin
 
 function unlockDashboard(initialData) {
     // Hide login, show dashboard
@@ -458,7 +145,6 @@ function unlockDashboard(initialData) {
     initCustomDatePicker();
     initLogoutButton();
     initDataTabs();
-    initChangePasswordModal();
 
     // If we already have data from login, render it. Otherwise fetch.
     if (initialData) {
@@ -484,140 +170,13 @@ function initLogoutButton() {
         storedPassword = '';
         document.getElementById('dashboardContent').style.display = 'none';
         document.getElementById('loginOverlay').style.display = 'flex';
-        document.getElementById('loginUsername').value = '';
-        document.getElementById('loginPassword').value = '';
-        document.getElementById('loginError').style.display = 'none';
-        document.getElementById('captchaInput').value = '';
+        const loginError = document.getElementById('loginError');
+        if (loginError) loginError.style.display = 'none';
         initLogin();
     });
 }
 
-// ==========================================
-// CHANGE PASSWORD
-// ==========================================
-
-function initChangePasswordModal() {
-    const changePwBtn = document.getElementById('changePwBtn');
-    const modal = document.getElementById('changePasswordModal');
-    const closeBtn = document.getElementById('closeModalBtn');
-    const saveBtn = document.getElementById('savePasswordBtn');
-    
-    const currentPwInput = document.getElementById('currentPassword');
-    const newPwInput = document.getElementById('newPassword');
-    const confirmPwInput = document.getElementById('confirmPassword');
-    
-    const errorMsg = document.getElementById('modalError');
-    const successMsg = document.getElementById('modalSuccess');
-
-    if (!changePwBtn) return;
-
-    // Password strength checker for change password modal
-    saveBtn.disabled = true;
-    newPwInput.addEventListener('input', () => {
-        const allPassed = checkPasswordStrength(newPwInput.value, 'modal');
-        saveBtn.disabled = !allPassed;
-    });
-
-    changePwBtn.addEventListener('click', () => {
-        errorMsg.style.display = 'none';
-        successMsg.style.display = 'none';
-        currentPwInput.value = '';
-        newPwInput.value = '';
-        confirmPwInput.value = '';
-        // Reset strength UI
-        const strengthEl = document.getElementById('modalPwStrength');
-        if (strengthEl) strengthEl.style.display = 'none';
-        saveBtn.disabled = true;
-        modal.style.display = 'flex';
-        currentPwInput.focus();
-    });
-
-    closeBtn.addEventListener('click', () => {
-        modal.style.display = 'none';
-    });
-
-    saveBtn.addEventListener('click', () => saveNewPassword());
-}
-
-async function saveNewPassword() {
-    const currentPwInput = document.getElementById('currentPassword');
-    const newPwInput = document.getElementById('newPassword');
-    const confirmPwInput = document.getElementById('confirmPassword');
-    const saveBtn = document.getElementById('savePasswordBtn');
-    const errorMsg = document.getElementById('modalError');
-    const successMsg = document.getElementById('modalSuccess');
-
-    const currentPw = currentPwInput.value.trim();
-    const newPw = newPwInput.value.trim();
-    const confirmPw = confirmPwInput.value.trim();
-
-    // 1. Validation
-    if (!currentPw || !newPw || !confirmPw) {
-        errorMsg.textContent = 'Please fill in all fields.';
-        errorMsg.style.display = 'block';
-        return;
-    }
-
-    if (newPw !== confirmPw) {
-        errorMsg.textContent = 'New passwords do not match.';
-        errorMsg.style.display = 'block';
-        return;
-    }
-
-    if (!checkPasswordStrength(newPw, 'modal')) {
-        errorMsg.textContent = 'Password does not meet the policy requirements.';
-        errorMsg.style.display = 'block';
-        return;
-    }
-
-    // 2. API Call
-    saveBtn.disabled = true;
-    saveBtn.textContent = 'Saving...';
-    errorMsg.style.display = 'none';
-
-    try {
-        const token = sessionStorage.getItem('smartmenyu_token');
-        const response = await fetch(`${analyticsConfig.apiBaseUrl}/api/admin/change-password`, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            credentials: 'include',
-            body: JSON.stringify({
-                username: storedUsername,
-                currentPassword: currentPw,
-                newPassword: newPw
-            })
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            errorMsg.textContent = result.message || `Error ${response.status}: Failed to update password.`;
-            errorMsg.style.display = 'block';
-            saveBtn.disabled = false;
-            saveBtn.textContent = 'Save Changes';
-            return;
-        }
-
-        // 3. Success
-        successMsg.style.display = 'block';
-
-        setTimeout(() => {
-            document.getElementById('changePasswordModal').style.display = 'none';
-            saveBtn.disabled = false;
-            saveBtn.textContent = 'Save Changes';
-        }, 1500);
-
-    } catch (err) {
-        console.error('Change password error:', err);
-        errorMsg.textContent = getErrorMessage(err, 'Network error or server unreachable. Please check your connection and try again.');
-        errorMsg.style.display = 'block';
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save Changes';
-    }
-}
+// Change password logic removed as per user request
 
 // ==========================================
 // FILTER BUTTONS
@@ -704,16 +263,9 @@ async function fetchAnalytics(range, from, to) {
         const response = await fetch(url, fetchOptions);
 
         if (response.status === 401 || response.status === 403) {
-            // Credentials expired or changed — force re-login
-            sessionStorage.removeItem('smartmenyu_admin_user');
-            sessionStorage.removeItem('smartmenyu_token');
-            storedUsername = '';
-            document.getElementById('dashboardContent').style.display = 'none';
-            document.getElementById('loginOverlay').style.display = 'flex';
-            document.getElementById('loginError').textContent = 'Session expired. Please log in again.';
-            document.getElementById('loginError').style.display = 'block';
+            console.warn('Authentication failed (401/403). Backend might still be locked.');
             showLoading(false);
-            initLogin();
+            showEmpty(); // Show empty state instead of redirecting
             return;
         }
 
